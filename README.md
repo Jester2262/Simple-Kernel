@@ -32,7 +32,7 @@ This project is designed to inherit all of the features provided by https://gith
 
 - x86-64 architecture with AVX (most Intel ix-2xxx or newer or AMD Ryzen or newer CPUs have it, see [the Wikipedia page on AVX](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX))
 - Secure Boot must be disabled  
-- At least 1GB total system RAM *per logical core*, with the total size being a whole number of GB ***(1)***  
+- At least 1GB total system RAM *per logical core*
 - At least 1 graphics card (Intel, AMD, NVidia, etc.) **with UEFI GOP support**  
 - A keyboard  
 
@@ -41,8 +41,6 @@ The earliest GPUs with UEFI GOP support were released around the Radeon HD 7xxx 
 *NOTE: You need to check each graphics card if there is a mix, as you will only be able to use the ones with UEFI GOP support. Per the system requirements above, you need at least one compliant device. Multiple devices are supported per https://github.com/KNNSpeed/Simple-UEFI-Bootloader.*  
 
 **IMPORTANT VM INFO:** If using a hypervisor like Microsoft's Hyper-V, use a generation 2 VM with configuration version 9.0 or higher and turn off "Dynamic Memory" in the VM's settings. 4GB RAM is the minimum that must be assigned to the VM regardless of core count; using less RAM causes the VM to crash while setting up identity mapped page tables with 1GB page sizes.
-
-***(1)*** Any extra halves or 3/4s, etc. will simply be ignored, so use, e.g., 9GB or 10GB instead of 9.5GB. For an Intel/AMD 4-core with hyperthreading/SMT turned on, use 8GB RAM, otherwise 4GB with it off. Note that some of the more advanced multi-core functionality is not usable without 1GB+ per core. Also, when using multi-core "RAM partitioning," cores can only be assigned whole numbers of GBs of RAM, not, e.g. 12GB divided by 8 cores into 1.5GB per core--in a situation like this 4GB might need to be used as shared pages, or 4 cores get 2GB and the other 4 get 1GB, etc.  
 
 ## License and Crediting  
 
