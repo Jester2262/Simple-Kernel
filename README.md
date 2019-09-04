@@ -32,7 +32,7 @@ This project is designed to inherit all of the features provided by https://gith
 
 - x86-64 architecture with AVX (most Intel ix-2xxx or newer or AMD Ryzen or newer CPUs have it, see [the Wikipedia page on AVX](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX))
 - Secure Boot must be disabled  
-- At least 1GB total system RAM *per logical core*
+- At least 1GB total system RAM *per logical core* is recommended, but 4GB may be considered the minimum ***(1)***
 - At least 1 graphics card (Intel, AMD, NVidia, etc.) **with UEFI GOP support**  
 - A keyboard  
 
@@ -40,7 +40,7 @@ The earliest GPUs with UEFI GOP support were released around the Radeon HD 7xxx 
 
 *NOTE: You need to check each graphics card if there is a mix, as you will only be able to use the ones with UEFI GOP support. Per the system requirements above, you need at least one compliant device. Multiple devices are supported per https://github.com/KNNSpeed/Simple-UEFI-Bootloader.*  
 
-**IMPORTANT VM INFO:** If using a hypervisor like Microsoft's Hyper-V, use a generation 2 VM with configuration version 9.0 or higher and turn off "Dynamic Memory" in the VM's settings. 4GB RAM is the minimum that must be assigned to the VM regardless of core count; using less RAM causes the VM to crash while setting up identity mapped page tables with 1GB page sizes.
+***(1)*** **IMPORTANT VM INFO:** If using a hypervisor like Microsoft's Hyper-V, use a generation 2 VM with configuration version 9.0 or higher and turn off "Dynamic Memory" in the VM's settings. 4GB RAM is the minimum that must be assigned to the VM regardless of core count; using less RAM causes the VM to crash while setting up identity mapped page tables with 1GB page sizes.
 
 ## License and Crediting  
 
