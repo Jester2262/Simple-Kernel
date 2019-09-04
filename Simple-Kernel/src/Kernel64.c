@@ -2,7 +2,7 @@
 //  Simple Kernel: Kernel Entrypoint
 //==================================================================================================================================
 //
-// Version 0.z
+// Version 0.8
 //
 // Author:
 //  KNNSpeed
@@ -151,7 +151,7 @@ const unsigned char load_image3[144] = {
     0x00, 0x3F, 0x80, 0x00, // ........ ..@@@@@@ @....... ........
     0x00, 0x3F, 0x80, 0x00  // ........ ..@@@@@@ @....... ........
 }; // Width = 27 bits, height = 36 bytes
-// Output_render_text will ignore the last 5 bits of zeros in each row if width is specified as 27.
+// Output_render_bitmap will ignore the last 5 bits of zeros in each row if width is specified as 27.
 
 // To print text requires a bitmap font.
 // NOTE: Using Output_render_bitmap() instead of Output_render_text() technically allows any arbitrary font to be used as long as it is stored the same way as the included font8x8.
@@ -165,7 +165,7 @@ const unsigned char load_image3[144] = {
 //
 
 // Can't use local arrays in a naked function (at least, the compiler won't allow it, though it can be done with assembly)
-// They'll just need to take up some program RAM instead of stack space as global variables instead.
+// They'll just need to take up some program RAM as global variables instead of stack space.
 
 __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 {
@@ -180,21 +180,25 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 
   // Now initialize the system (Virtual mappings (identity-map), printf, AVX, any straggling control registers, HWP, maskable interrupts)
   System_Init(LP); // See System.c for what this does. One step is involves calling a function that can re-assign printf to a different GPU.
+
   // Main Body Start
+  uint64_t start_time = get_tick();
 
 //  bitmap_bitswap(load_image, 12, 27, swapped_image);
-//  char swapped_image2[sizeof(load_image)];
-//  bitmap_bytemirror(swapped_image, 12, 27, swapped_image2);
+//  bitmap_bytemirror(load_image2, 24, 27, swapped_image);
   bitmap_bitreverse(load_image2, 24, 27, swapped_image);
   for(UINT64 k = 0; k < LP->GPU_Configs->NumberOfFrameBuffers; k++) // Multi-GPU support!
   {
-    bitmap_anywhere_scaled(LP->GPU_Configs->GPUArray[k], swapped_image, 24, 27, 0x0000FFFF, 0xFF000000, ((LP->GPU_Configs->GPUArray[k].Info->HorizontalResolution - 5*27) >>  1), ((LP->GPU_Configs->GPUArray[k].Info->VerticalResolution - 5*24) >> 1), 5);
+    bitmap_anywhere_scaled(LP->GPU_Configs->GPUArray[k], swapped_image, 24, 27, 0x0000FFFF, 0x00FF0000, ((LP->GPU_Configs->GPUArray[k].Info->HorizontalResolution - 5*27) >>  1), ((LP->GPU_Configs->GPUArray[k].Info->VerticalResolution - 5*24) >> 1), 10, 3);
   }
 
   Print_Loader_Params(LP);
 //  Print_Segment_Registers();
 
-  Get_Brandstring((uint32_t*)brandstring); // Returns a char* pointer to brandstring. Don't need it here, though.
+  uint32_t* brandstring = (uint32_t*)malloc(48);
+  char * Manufacturer_ID = (char*)malloc(13);
+
+  Get_Brandstring(brandstring); // Returns a char* pointer to brandstring. Don't need it here, though.
   printf("%.48s\r\n", brandstring);
 
   Get_Manufacturer_ID(Manufacturer_ID); // Returns a char* pointer to Manufacturer_ID. Don't need it here, though.
@@ -202,8 +206,15 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 
   print_system_memmap();
   printf("Total EfiConventionalMemory: %llu\r\n", GetFreeSystemRam());
+  printf("Total Installed RAM: %qu\r\n", GetInstalledSystemRam(LP->ConfigTables, LP->Number_of_ConfigTables));
 
-  ZeroAllConventionalMemory();
+//  ZeroAllConventionalMemory();
+  free(brandstring);
+  free(Manufacturer_ID);
+  print_system_memmap();
+
+  uint64_t end_time = get_tick();
+  printf("Result: start: %qu end: %qu diff: %qu", start_time, end_time, end_time - start_time);
 
 /*
   printf("Avg CPU freq: %qu\r\n", get_CPU_freq(NULL, 0));
@@ -292,8 +303,10 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   Colorscreen(LP->GPU_Configs->GPUArray[0], 0x000000FF); // Blue in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
   single_char(LP->GPU_Configs->GPUArray[0], '?', 8, 8, 0x00FFFFFF, 0x00000000);
   single_char_anywhere(LP->GPU_Configs->GPUArray[0], '!', 8, 8, 0x00FFFFFF, 0xFF000000, (LP->GPU_Configs->GPUArray[0].Info->HorizontalResolution >> 2), LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/3);
-  single_char_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 'H', 8, 8, 0x00FFFFFF, 0xFF000000, 10, 10, 5);
-  string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "Is it soup?", 8, 8, 0x00FFFFFF, 0x00000000, 10, 10, 1);
+  string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "Is it soup?", 8, 8, 0x00FFFFFF, 0x00000000, 10, 15, 1, 1);
+  single_char_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 'B', 8, 8, 0x00FFFFFF, 0xFF000000, 10, 10, 5, 5); // transparent background
+  single_char_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 'X', 8, 8, 0xFF000000, 0x00FFFFFF, 50, 10, 5, 5); // transparent font
+  string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "Is it soup?", 8, 8, 0x00FFFFFF, 0x00000000, 10, 40, 1, 1);
 
   // ASM so that GCC doesn't mess with this loop. This is about as optimized this can get.
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -308,7 +321,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   Colorscreen(LP->GPU_Configs->GPUArray[0], 0x0000FF00); // Green in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
   single_char(LP->GPU_Configs->GPUArray[0], 'A', 8, 8, 0x00FFFFFF, 0x00000000);
   single_char_anywhere(LP->GPU_Configs->GPUArray[0], '!', 8, 8, 0x00FFFFFF, 0xFF000000, (LP->GPU_Configs->GPUArray[0].Info->HorizontalResolution >> 2), LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/3);
-  string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "Is it really soup?", 8, 8, 0x00FFFFFF, 0x00000000, 50, 50, 3);
+  string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "Is it really soup?", 8, 8, 0x00FFFFFF, 0x00000000, 50, 50, 3, 3);
 
   // ASM so that GCC doesn't mess with this loop. This is about as optimized this can get.
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -324,16 +337,17 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   printf("PRINTF!! 0x%qx", LP->GPU_Configs->GPUArray[0].FrameBufferBase);
   printf("Whup %s\r\nOh.\r\n", "Yo%%nk");
 
-  Global_Print_Info.scale = 4; // Output scale for systemfont used by printf
-  Global_Print_Info.textscrollmode = Global_Print_Info.height*Global_Print_Info.scale; // Quick scrolling
+  Global_Print_Info.xscale = 2;
+  Global_Print_Info.yscale = 4; // Output scale for systemfont used by printf
+  Global_Print_Info.textscrollmode = Global_Print_Info.height*Global_Print_Info.yscale; // Quick scrolling
 
   printf("Hello this is a sentence how far does it go before it wraps around?\nA\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ\nYAY");
   printf("Hello this is a sentence how far does it go before it wraps around?\nA\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ\nYAY");
   printf("Hello this is a sentence how far does it go before it wraps around?\nA\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ\nYAY");
   printf("Hello this is a sentence how far does it go before it wraps around?\nA\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ\nYAY");
-// The VLA in these causes a page fault in ELF-format
-  formatted_string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 8, 8, 0x00FFFFFF, 0x00000000, 0,  LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/2, 2, "FORMATTED STRING!! %#x", Global_Print_Info.index);
-  formatted_string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 8, 8, 0x00FFFFFF, 0x00000000, 0,  LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/4, 2, "FORMATTED %s STRING!! %s", "Heyo!", "Heyz!");
+// No more VLAs!! Hurray!
+  formatted_string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 8, 8, 0x00FFFFFF, 0x00000000, 0,  LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/2, 2, 2, "FORMATTED STRING!! %#x", Global_Print_Info.index);
+  formatted_string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 8, 8, 0x00FFFFFF, 0x00000000, 0,  LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/4, 2, 2, "FORMATTED %s STRING!! %s", "Heyo!", "Heyz!");
   printf("This printf shouldn't move due to formatted string invocation.");
   single_char(LP->GPU_Configs->GPUArray[0], '2', 8, 8, 0x00FFFFFF, 0xFF000000);
 
@@ -369,8 +383,8 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   single_pixel(LP->GPU_Configs->GPUArray[0], LP->GPU_Configs->GPUArray[0].Info->HorizontalResolution >> 2, LP->GPU_Configs->GPUArray[0].Info->VerticalResolution >> 2, 0x00FFFFFF);
   single_char(LP->GPU_Configs->GPUArray[0], '@', 8, 8, 0x00FFFFFF, 0x00000000);
   single_char_anywhere(LP->GPU_Configs->GPUArray[0], '!', 8, 8, 0x00FFFFFF, 0xFF000000, 512, 512);
-  single_char_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 'I', 8, 8, 0x00FFFFFF, 0xFF000000, 10, 10, 2);
-  string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "OMG it's actually soup! I don't believe it!!", 8, 8, 0x00FFFFFF, 0x00000000, 0, LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/2, 2);
+  single_char_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 'I', 8, 8, 0x00FFFFFF, 0xFF000000, 10, 10, 2, 2);
+  string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "OMG it's actually soup! I don't believe it!!", 8, 8, 0x00FFFFFF, 0x00000000, 0, LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/2, 2, 2);
 
   // ASM so that GCC doesn't mess with this loop. This is about as optimized this can get.
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -383,13 +397,14 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
               );
 
   // For shutdown, need to know if system is ACPI hardware-reduced or using legacy ACPI. There's a flag in FADT.
-  Global_Print_Info.scale = 1; // Output scale for systemfont used by printf
-  Global_Print_Info.textscrollmode = Global_Print_Info.height*Global_Print_Info.scale; // Readjust quick scrolling
+  Global_Print_Info.xscale = 1;
+  Global_Print_Info.yscale = 1; // Output scale for systemfont used by printf
+  Global_Print_Info.textscrollmode = Global_Print_Info.height*Global_Print_Info.yscale; // Readjust quick scrolling
 
   // Search for ACPI tables
   uint8_t RSDPfound = 0;
   uint64_t RSDP_index = 0;
-  printf("Acpi20GUID: %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\r\n",
+  printf("\r\nAcpi20GUID: %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\r\n",
           Acpi20TableGuid.Data1,
           Acpi20TableGuid.Data2,
           Acpi20TableGuid.Data3,
@@ -426,6 +441,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
       printf("RSDP 2.0 found!\r\n");
       RSDP_index = i;
       RSDPfound = 2;
+      break;
     }
   }
   // If no RSDP 2.0, check for 1.0
@@ -438,6 +454,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
         printf("RSDP 1.0 found!\r\n");
         RSDP_index = i;
         RSDPfound = 1;
+        break;
       }
     }
   }
@@ -471,7 +488,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   }
 
   // EFI ResetSystem() isn't always implemented. It doesn't appear to be on my Dell--in fact, invoking it causes data near address 0x0 to be loaded
-  // into %rip, which then page faults because it loads a value of 0x7ff00000000, which would be 8188GB RAM. Fun fact: I only have 32GB. Page Fault!!
+  // into %rip, which then page faults because it loads a value of 0x7ff00000000, which would be 8188GB RAM. Fun fact: I only have 32GB. Page Fault!
   // Since this happens even when ResetSystem() is called right after ExitBootServices() (or even when no VMAP or paging has been set), this
   // is squarely a firmware fault. This is why:
   // https://docs.microsoft.com/en-us/windows-hardware/design/device-experiences/oem-uefi#runtime-requirements
@@ -501,7 +518,8 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
       LP->RTServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL); // Shutdown the system
     }
   }*/
-  printf("What? Can this thing not shut down on its own?? Please force power off.\r\n");
+  error_printf("What? Can this thing not shut down on its own?? Please force power off.\r\n");
+
   HaCF();
 }
 // END MAIN
@@ -745,41 +763,6 @@ void Print_Segment_Registers(void)
 
   uint64_t cs = read_cs();
   printf("CS: %#qx\r\n", cs);
-
-/*
-  // TODO: remove this
-  __m256i_u whaty = _mm256_set1_epi32(0x17181920);
-  __m256i_u what2 = _mm256_set1_epi64x(0x1718192011223344);
-  __m256i_u what3 = _mm256_set1_epi32(0x18);
-  __m256i_u what9 = _mm256_set1_epi32(0x180019);
-
-  asm volatile("vmovdqu %[what], %%ymm1" : : [what] "m" (whaty) :);
-  asm volatile("vmovdqu %[what], %%ymm2" : : [what] "m" (what2) :);
-  asm volatile("vmovdqu %[what], %%ymm3" : : [what] "m" (what3) :);
-  asm volatile("vmovdqu %[what], %%ymm4" : : [what] "m" (whaty) :);
-  asm volatile("vmovdqu %[what], %%ymm5" : : [what] "m" (whaty) :);
-  asm volatile("vmovdqu %[what], %%ymm6" : : [what] "m" (whaty) :);
-  asm volatile("vmovdqu %[what], %%ymm7" : : [what] "m" (whaty) :);
-
-  asm volatile("vmovdqu %[what], %%ymm15" : : [what] "m" (what9) :);
-
-  volatile __m256i output = _mm256_bsrli_epi128(what2, 1);
-//  asm volatile ("int3");
-//  asm volatile ("int $32");
-
-  volatile uint64_t c = cs / (cs >> 10); // TODO: remove this lol
-*/
-  uint64_t pml4_addr = cr3 & -4096ULL;
-
-  uint64_t pdp_addr = ((uint64_t*)pml4_addr)[0] & (-4096ULL ^ (1ULL << 63)); // bit 63 is NX, 11:0 are not addr
-  uint64_t pd_addr = ((uint64_t*)pdp_addr)[0] & (-4096ULL ^ (1ULL << 63));
-  uint64_t pt_addr = ((uint64_t*)pd_addr)[0] & (-4096ULL ^ (1ULL << 63));
-
-  for(uint64_t q = 0; q < 40; q++)
-  {
-    printf("%llu. pml4 data: %#qx | pdp data: %#qx | pd data: %#qx | pt data: %#qx\r\n", q, ((uint64_t*)pml4_addr)[q], ((uint64_t*)pdp_addr)[q], ((uint64_t*)pd_addr)[q], ((uint64_t*)pt_addr)[q]);
-  }
-
 }
 
 ////////////////////////////////////////////////////

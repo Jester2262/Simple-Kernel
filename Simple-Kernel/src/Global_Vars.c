@@ -32,9 +32,10 @@
 // should be defined as "static const" in a header file that is common to all the .c files that need to access the constant. A
 // global read-only constant can be thought of as a read-only data type that is initialized to a non-zero value. Normally, a
 // downside of being static in a common header means the constant will take up space in every translation unit (think of it like
-// each .c file gets its own copy of a variable defined as "static" in a common header, and changing it in one has no impact on
-// other files). However, a GCC merges constants with the "fmerge-constants" flag (on by default), so "static const" actually
-// share the same definition and don't hog unnecessary space.
+// each .c file gets its own copy of a variable defined as "static" in a common header, and changing it in one .c file has no impact
+// on other files). However, GCC merges constants with the "fmerge-constants" flag (on by default), so "static const" actually share
+// the same definition and don't hog unnecessary space. NOTE: "fmerge-constants" is not the same as "fmerge-all-constants"; the
+// latter also merges variables with the same name between different compilation units, which can have all kinds of weird results.
 //
 
 #include "Kernel64.h"
@@ -92,7 +93,9 @@ typedef struct {
   UINT32                             background_color; // Default background color
 	UINT32                             x;                // Leftmost x-coord that's in-bounds (NOTE: per UEFI Spec 2.7 Errata A, (0,0) is always the top left in-bounds pixel.)
 	UINT32                             y;                // Topmost y-coord
-	UINT32                             scale;            // Output scale for systemfont used by printf
+	UINT32                             xscale;           // Output width scale for systemfont used by printf
+  UINT32                             yscale;           // Output height scale for systemfont used by printf
+  UINT32                             Reserved;         // Reserved for future use.
   UINT32                             index;            // Global string index for printf, etc. to keep track of cursor's postion in the framebuffer
   UINT32                             textscrollmode;   // What to do when a newline goes off the bottom of the screen: 0 = scroll entire screen, 1 = wrap around to the top
 } GLOBAL_PRINT_INFO_STRUCT;
@@ -120,5 +123,4 @@ GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info = {0};
 
 // For kernel_main(), since naked functions can't have local variables that require stack space
 unsigned char swapped_image[96] = {0};
-char brandstring[48] = {0};
-char Manufacturer_ID[13] = {0};
+unsigned char swapped_image2[96] = {0};

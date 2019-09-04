@@ -2,7 +2,7 @@
 //  Simple Kernel: System Initialization
 //==================================================================================================================================
 //
-// Version 0.z
+// Version 0.8
 //
 // Author:
 //  KNNSpeed
@@ -83,9 +83,6 @@ void System_Init(LOADER_PARAMS * LP)
     }
   }
 
-// TODO: print memmap before and after to test malloc stuff
-  print_system_memmap();
-
   // Make a replacement GDT since the UEFI one is in EFI Boot Services Memory.
   // Don't need anything fancy, just need one to exist somewhere (preferably in EfiLoaderData, which won't change with this software)
   Setup_MinimalGDT();
@@ -130,6 +127,7 @@ uint64_t get_tick(void)
                   : // no inputs
                   : "%rcx"// clobbers
                   );
+
     return (high << 32 | low);
 }
 
@@ -871,7 +869,7 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
 // input data is ignored on reads
 //
 
-uint32_t portio_rw(uint16_t port_address, uint32_t data, int size, int rw)
+uint32_t portio_rw(uint16_t port_address, uint32_t data, uint8_t size, uint8_t rw)
 {
   if(size == 1)
   {
@@ -949,7 +947,7 @@ uint32_t portio_rw(uint16_t port_address, uint32_t data, int size, int rw)
 // input data is ignored for reads
 //
 
-uint64_t msr_rw(uint64_t msr, uint64_t data, int rw)
+uint64_t msr_rw(uint64_t msr, uint64_t data, uint8_t rw)
 {
   uint64_t high = 0, low = 0;
 
@@ -985,7 +983,7 @@ uint64_t msr_rw(uint64_t msr, uint64_t data, int rw)
 // input data is ignored for reads
 //
 
-uint32_t vmxcsr_rw(uint32_t data, int rw)
+uint32_t vmxcsr_rw(uint32_t data, uint8_t rw)
 {
   if(rw == 1) // Write
   {
@@ -1016,7 +1014,7 @@ uint32_t vmxcsr_rw(uint32_t data, int rw)
 // input data is ignored for reads
 //
 
-uint32_t mxcsr_rw(uint32_t data, int rw)
+uint32_t mxcsr_rw(uint32_t data, uint8_t rw)
 {
   if(rw == 1) // Write
   {
@@ -1048,7 +1046,7 @@ uint32_t mxcsr_rw(uint32_t data, int rw)
 // rw: 0 = read, 1 = write
 //
 
-uint64_t control_register_rw(int crX, uint64_t in_out, int rw) // Read from or write to a control register
+uint64_t control_register_rw(int crX, uint64_t in_out, uint8_t rw) // Read from or write to a control register
 {
   if(rw == 1) // Write
   {
@@ -1184,7 +1182,7 @@ uint64_t control_register_rw(int crX, uint64_t in_out, int rw) // Read from or w
 // data is ignored for reads
 //
 
-uint64_t xcr_rw(uint64_t xcrX, uint64_t data, int rw)
+uint64_t xcr_rw(uint64_t xcrX, uint64_t data, uint8_t rw)
 {
   uint64_t high = 0, low = 0;
 
@@ -1206,6 +1204,7 @@ uint64_t xcr_rw(uint64_t xcrX, uint64_t data, int rw)
              : // No clobbers
            );
   }
+
   return (high << 32 | low); // For write, this will be data. Reads will be the msr's value.
 }
 
@@ -1225,6 +1224,7 @@ uint64_t read_cs(void)
                 : // no inputs
                 : // no clobbers
                 );
+
   return output;
 }
 
@@ -2047,7 +2047,7 @@ void Setup_Paging(void)
   // Ok, how much mapped memory do we have that needs to be in CPU pages?
 
   // The ACPI standard expects the UEFI memory map to describe *all installed memory* and not any virtual address spaces.
-  // This means the UEFI map can be used to get the total system memory (but not by adding up all the pages to due to the variable-sized "hole" from 0xA0000 to 0xFFFFF).
+  // This means the UEFI map can be used to get the total physical address space (but not by adding up all the pages to due to the variable-sized "hole" from 0xA0000 to 0xFFFFF).
   // See ACPI Specficiation 6.2A, Section 15.4 (UEFI Assumptions and Limitations)
   uint64_t max_ram = GetMaxMappedPhysicalAddress();
 //  printf("Total Mapped Memory: %qu Bytes (= %qu GB), Hex: %#qx\r\n", max_ram, max_ram >> 30, max_ram);
@@ -2060,6 +2060,9 @@ void Setup_Paging(void)
                : "%rbx", "%rcx"// CPUID would clobber any of the abcd registers not listed explicitly (all are here, though)
              );
 
+  // In the future, checking for 512GB and 256TB paging would go here. These might imply 5-level paging support (depends if 512GB paging is ever added to a CPU with only
+  // 4-level support), and will need either 2 levels or 1 level of tables, respectively, for a minimal paging setup. The 256TB version would be pretty simple to implement with 'outermost_table'...
+
   if(rdx & (1 << 26))
   {
     // Use 1GB pages
@@ -2070,18 +2073,20 @@ void Setup_Paging(void)
     // also added it here for future use. Waaaaaaay future use. And even if the draft changes it isn't hard to modify this code, so no big deal.
     //
     // 5-level paging tables are crazy and can take up to 1GB+2MB+4KB space using 1GB pages. 512GB+1GB+2MB+4KB if using 2MB pages, and
-    // 256TB+512GB+1GB+2MB+4KB for 4k pages. Granted, that is for systems with ~128PB RAM... I guess nobody wanted to implement 512GB pages at
-    // the same time as 5-level paging? That would allow 5-level paging to work with quantities like 128PB and only use 2 tables, like 1GB pages
-    // with 4-level paging. That only takes up 2MB+4KB worst-case. Perhaps 512GB pages will come as a future extension to 5-level paging?
+    // 256TB+512GB+1GB+2MB+4KB for 4k pages. Granted, that is for systems with ~128PB RAM, which look like they'll also have 512GB paging.
+    // It seems there may also be an option for mapping 256TB pages directly in the PML5.
+    //
+    // https://www.sandpile.org/x86/paging.htm has a nice visual breakdown of paging structure format.
+
     uint64_t cr4 = control_register_rw(4, 0, 0);
     if(cr4 & (1 << 12)) // Check CR4.LA57 for 5-level paging support
     {
       // 5-level paging, 3 tables needed for 1GB pages
       printf("5-level paging is active.\r\n");
 
-      if(max_ram > (1ULL << 57)) // 128PB is the max
+      if(max_ram >= (1ULL << 52)) // 128PB (1ULL << 57) is the max VA, though 4PB (1ULL << 52) is the max PA
       {
-        printf("Hey! There's way too much RAM here. Is the year like 2050 or something?\r\nRAM will be limited to 128PB, the max allowed by 5-level paging wth 1GB pages.\r\n");
+        printf("Hey! There's way too much RAM here. Is the year like 2050 or something?\r\nRAM will be limited to 4PB, the max allowed by 5-level paging wth 1GB pages.\r\n");
         printf("At this point there's probably a new paging size (or a new paging mechanism? Is paging even used anymore?), which needs to be implmented in the code.\r\n");
         printf("8K 120FPS displays must be mainstream by now, too...\r\n");
       }
@@ -2181,7 +2186,7 @@ void Setup_Paging(void)
       // 4-level paging, 2 tables needed for 1GB pages
       printf("4-level paging is active.\r\n");
 
-      if(max_ram > (1ULL << 48)) // 256TB is the max with 4-level paging; to get the full 4PB (1 << 52) supported by the AMD64 4-level paging spec would require 16GB pages that don't exist (except on IBM POWER5+ mainframes)...
+      if(max_ram >= (1ULL << 48)) // 256TB is the max with 4-level paging; to get the full 4PB (1 << 52) supported by the AMD64 4-level paging spec would require 16GB pages that don't exist (except on IBM POWER5+ mainframes)...
       {
         printf("Hey! There's way too much RAM here and 5-level paging isn't enabled/supported.\r\nPlease contact your system vendor about this as it is a UEFI firmware issue.\r\nRAM will be limited to 256TB, the max allowed by 4-level paging.\r\n");
       }
@@ -2248,7 +2253,7 @@ void Setup_Paging(void)
 
     printf("1GB pages are not supported, falling back to 2MB for the page tables instead. The system will still act like 1GB pages are used, however.\r\n");
 
-    if(max_ram > (1ULL << 48)) // 256TB is the max with 4-level pages
+    if(max_ram >= (1ULL << 48)) // 256TB is the max with 4-level pages
     {
       printf("Hey! There's way too much RAM here and 5-level paging isn't supported.\r\nRAM will be limited to 256TB, the max allowed by 4-level paging with 2MB pages.\r\n");
       printf("In the event someone actually manages to trigger this error, please be aware that this situation means the paging tables alone will consume 1GB of RAM.\r\n");
@@ -2312,7 +2317,7 @@ void Setup_Paging(void)
 
         for(uint64_t pd_entry = 0; pd_entry < max_pd_entry; pd_entry++)
         {
-          ((uint64_t*)((uint64_t*)outermost_table[pml4_entry])[pdp_entry])[pd_entry] = (((pml4_entry << 18) + (pdp_entry << 9) + pd_entry) << 21) | (0x83); // Flags: NX[63] = 0, PAT[12] = 0, G[8] = 0, 1GB[7] = 1, D[6] = 0, A[5] = 0, PCD[4] = 0, PWT[3] = 0, U/S[2] = 0, R/W[1] = 1, P[0] = 1.
+          ((uint64_t*)((uint64_t*)outermost_table[pml4_entry])[pdp_entry])[pd_entry] = (((pml4_entry << 18) + (pdp_entry << 9) + pd_entry) << 21) | (0x83); // Flags: NX[63] = 0, PAT[12] = 0, G[8] = 0, 2MB[7] = 1, D[6] = 0, A[5] = 0, PCD[4] = 0, PWT[3] = 0, U/S[2] = 0, R/W[1] = 1, P[0] = 1.
         }
 
         ((uint64_t*)outermost_table[pml4_entry])[pdp_entry] |= 0x3;
@@ -2324,7 +2329,7 @@ void Setup_Paging(void)
   }
 
   control_register_rw(3, (uint64_t)outermost_table, 1);
-  // Certain hypervisors like Hyper-V will crash right here if less than 4GB is allocated to the VM. Actually, it appears to be 3968MB or less, as Hyper-V mysteriously adds 2-128MB on top of memory allocated via settings.
+  // Certain hypervisors like Hyper-V will crash right here if less than 4GB is allocated to the VM. Actually, it appears to be 3968MB or less, as this 4GBnumber appears to include the entirety of physical address space (including PCI config space, etc.).
   // In Windows Event Viewer, Hyper-V-Worker will throw one of these errors:
   // "<VM Name> was faulted because the guest executed an intercepting instruction not supported by Hyper-V instruction emulation."
   // "<VM Name> was reset because an unrecoverable error occurred on a virtual processor that caused a triple fault."

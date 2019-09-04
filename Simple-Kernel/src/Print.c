@@ -69,11 +69,12 @@
 // "New" has a partially-scrolled line up top, but text is aligned at the
 // bottom no matter the size. "Old" has no partially-scrolled line of text at
 // the top, but it has a gap of the default background color below the lowest
-// line of text. Does not matter for text sizes aligned with the screen's
+// line of text. There is no difference for text sizes aligned with the screen's
 // vertical resolution.
 //
 // Comment out this definition to use the "old" method.
 #define NEW_QUICK_SCROLL
+//
 
 static size_t strlen(const char *s);
 static inline int imax(int a, int b);
@@ -510,6 +511,9 @@ int snprintf(char *str, size_t size, const char *format, ...)
 /*
  * Scaled down version of vsnprintf(3).
  */
+// NOTE: If str is NULL then size MUST be 0, otherwise this will write to *NULL.
+// This matters if this function is used to get the size of a formatted string
+// + its arguments (- 1) for, e.g., dynamically allocating a string buffer.
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 {
 	struct snprintf_arg info;
@@ -589,19 +593,19 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 			break;
 		case '\x85': // NEL, or CR+LF in one character
 			arg->index = 0;
-			if((arg->y + arg->height * arg->scale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale)) // Vertical wraparound
+			if((arg->y + arg->height * arg->yscale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale)) // Vertical wraparound
 			{
 				if(!arg->textscrollmode)
 				{
 					arg->y = 0; // Wrap
 				}
-				else if(arg->textscrollmode == arg->height*arg->scale) // Quick Scroll
+				else if(arg->textscrollmode == arg->height*arg->yscale) // Quick Scroll
 				{
 
 #ifdef NEW_QUICK_SCROLL
-					// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * scale) == 0 fonts don't have to worry all text on screen is the same size)
-					uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-					arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
+					// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * yscale) == 0 fonts don't have to worry all text on screen is the same size)
+					uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+					arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
 
 					AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * min_scroll_size), (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine*4);
 					if(arg->background_color != 0xFF000000)
@@ -609,9 +613,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 						AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine);
 					}
 #else
-					// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * scale) == 0 fonts don't have to worry if all text on screen is the same size)
+					// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * yscale) == 0 fonts don't have to worry if all text on screen is the same size)
 					// Qualitative test results: This can scroll a 4K screen framebuffer (31MB) extremely quickly :D (Interestingly enough, the standard memmove in memmove.c can also do it pretty quickly since GCC vectorizes it.)
-					AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->scale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
+					AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->yscale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
 					if(arg->background_color != 0xFF000000)
 					{
 						AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->y * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - arg->y) * arg->defaultGPU.Info->PixelsPerScanLine);
@@ -628,9 +632,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 				}
 				else // Smooth scroll
 				{
-					uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-					arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
-					// This offset correction is needed in case a font size/scale combination is not an integer multiple of the vertical resolution.
+					uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+					arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
+					// This offset correction is needed in case a font size/yscale combination is not an integer multiple of the vertical resolution.
 					// Even if it is, changing scales or arg->y could cause a variable offset and that needs to be accounted for.
 
 					for(uint64_t smooth = 0; smooth < min_scroll_size; smooth += arg->textscrollmode) // Random: (smooth --> 0) is the same as ((smooth--) > 0); It may not be obvious that they're the same at first glance.
@@ -645,7 +649,7 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 			}
 			else
 			{
-				arg->y += arg->height * arg->scale;
+				arg->y += arg->height * arg->yscale;
 			}
 			break;
 		case '\014': // Form Feed, aka next page
@@ -667,19 +671,19 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 		// NOTE: This implementation does NOT make a vertical line of highlight_color.
 			for(int tabspaces = 0; tabspaces < 6; tabspaces++)
 			{
-				if((arg->y + arg->height * arg->scale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale)) // Vertical wraparound
+				if((arg->y + arg->height * arg->yscale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale)) // Vertical wraparound
 				{
 					if(!arg->textscrollmode)
 					{
 						arg->y = 0; // Wrap
 					}
-					else if(arg->textscrollmode == arg->height*arg->scale) // Quick Scroll
+					else if(arg->textscrollmode == arg->height*arg->yscale) // Quick Scroll
 					{
 
 #ifdef NEW_QUICK_SCROLL
-						// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * scale) == 0 fonts don't have to worry all text on screen is the same size)
-						uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-						arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
+						// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * yscale) == 0 fonts don't have to worry all text on screen is the same size)
+						uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+						arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
 
 						AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * min_scroll_size), (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine*4);
 						if(arg->background_color != 0xFF000000)
@@ -687,9 +691,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 							AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine);
 						}
 #else
-						// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * scale) == 0 fonts don't have to worry if all text on screen is the same size)
+						// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * yscale) == 0 fonts don't have to worry if all text on screen is the same size)
 						// Qualitative test results: This can scroll a 4K screen framebuffer (31MB) extremely quickly :D (Interestingly enough, the standard memmove in memmove.c can also do it pretty quickly since GCC vectorizes it.)
-						AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->scale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
+						AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->yscale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
 						if(arg->background_color != 0xFF000000)
 						{
 							AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->y * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - arg->y) * arg->defaultGPU.Info->PixelsPerScanLine);
@@ -706,9 +710,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 					}
 					else // Smooth scroll
 					{
-						uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-						arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
-						// This offset correction is needed in case a font size/scale combination is not an integer multiple of the vertical resolution.
+						uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+						arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
+						// This offset correction is needed in case a font size/yscale combination is not an integer multiple of the vertical resolution.
 						// Even if it is, changing scales or arg->y could cause a variable offset and that needs to be accounted for.
 
 						for(uint64_t smooth = 0; smooth < min_scroll_size; smooth += arg->textscrollmode) // Random: (smooth --> 0) is the same as ((smooth--) > 0); It may not be obvious that they're the same at first glance.
@@ -723,24 +727,24 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 				}
 				else
 				{
-					arg->y += arg->height * arg->scale;
+					arg->y += arg->height * arg->yscale;
 				}
 			}
 			break;
 		case '\n':
-			if((arg->y + arg->height * arg->scale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale)) // Vertical wraparound
+			if((arg->y + arg->height * arg->yscale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale)) // Vertical wraparound
 			{
 				if(!arg->textscrollmode)
 				{
 					arg->y = 0; // Wrap
 				}
-				else if(arg->textscrollmode == arg->height*arg->scale) // Quick Scroll
+				else if(arg->textscrollmode == arg->height*arg->yscale) // Quick Scroll
 				{
 
 #ifdef NEW_QUICK_SCROLL
-					// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * scale) == 0 fonts don't have to worry all text on screen is the same size)
-					uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-					arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
+					// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * yscale) == 0 fonts don't have to worry all text on screen is the same size)
+					uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+					arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
 
 					AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * min_scroll_size), (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine*4);
 					if(arg->background_color != 0xFF000000)
@@ -748,9 +752,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 						AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine);
 					}
 #else
-					// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * scale) == 0 fonts don't have to worry if all text on screen is the same size)
+					// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * yscale) == 0 fonts don't have to worry if all text on screen is the same size)
 					// Qualitative test results: This can scroll a 4K screen framebuffer (31MB) extremely quickly :D (Interestingly enough, the standard memmove in memmove.c can also do it pretty quickly since GCC vectorizes it.)
-					AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->scale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
+					AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->yscale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
 					if(arg->background_color != 0xFF000000)
 					{
 						AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->y * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - arg->y) * arg->defaultGPU.Info->PixelsPerScanLine);
@@ -767,9 +771,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 				}
 				else // Smooth scroll
 				{
-					uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-					arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
-					// This offset correction is needed in case a font size/scale combination is not an integer multiple of the vertical resolution.
+					uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+					arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
+					// This offset correction is needed in case a font size/yscale combination is not an integer multiple of the vertical resolution.
 					// Even if it is, changing scales or arg->y could cause a variable offset and that needs to be accounted for.
 
 					for(uint64_t smooth = 0; smooth < min_scroll_size; smooth += arg->textscrollmode) // Random: (smooth --> 0) is the same as ((smooth--) > 0); It may not be obvious that they're the same at first glance.
@@ -784,34 +788,31 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 			}
 			else
 			{
-				arg->y += arg->height * arg->scale;
+				arg->y += arg->height * arg->yscale;
 			}
 			break;
 		case '\t': // Tab
 			for(int tabspaces = 0; tabspaces < 8; tabspaces++) // Just do the default output actions 8 times with a space character. Tab stops are 8 characters across.
 			{ // But why not just do arg->index += 8? Because then the highlight won't propagate.
-				Output_render_text(arg->defaultGPU, ' ', arg->height, arg->width, arg->font_color, arg->highlight_color, arg->x, arg->y, arg->scale, arg->index);
-		//  	Output_render(Global_Print_Info.defaultGPU, output_character, Global_Print_Info.height, Global_Print_Info.width, Global_Print_Info.font_color, Global_Print_Info.highlight_color, Global_Print_Info.x, Global_Print_Info.y, Global_Print_Info.scale, Global_Print_Info.index);
-
+				Output_render_text(arg->defaultGPU, ' ', arg->height, arg->width, arg->font_color, arg->highlight_color, arg->x, arg->y, arg->xscale, arg->yscale, arg->index);
 				arg->index++; // Increment global character index
-		//  	Global_Print_Info.index++; // This should do the same thing.
 
-				if(arg->index * arg->width * arg->scale > (arg->defaultGPU.Info->HorizontalResolution - arg->width * arg->scale)) // Check if text is running off screen
+				if(arg->index * arg->width * arg->xscale > (arg->defaultGPU.Info->HorizontalResolution - arg->width * arg->xscale)) // Check if text is running off screen
 				{
 					arg->index = 0; // Horizontal wraparound
-					if((arg->y + arg->height * arg->scale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale)) // Vertical wraparound if hit the bottom of the screen
+					if((arg->y + arg->height * arg->yscale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale)) // Vertical wraparound if hit the bottom of the screen
 					{
 						if(!arg->textscrollmode)
 						{
 							arg->y = 0; // Wrap
 						}
-						else if(arg->textscrollmode == arg->height*arg->scale) // Quick Scroll
+						else if(arg->textscrollmode == arg->height*arg->yscale) // Quick Scroll
 						{
 
 #ifdef NEW_QUICK_SCROLL
-							// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * scale) == 0 fonts don't have to worry all text on screen is the same size)
-							uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-							arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
+							// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * yscale) == 0 fonts don't have to worry all text on screen is the same size)
+							uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+							arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
 
 							AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * min_scroll_size), (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine*4);
 							if(arg->background_color != 0xFF000000)
@@ -819,9 +820,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 								AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine);
 							}
 #else
-							// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * scale) == 0 fonts don't have to worry if all text on screen is the same size)
+							// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * yscale) == 0 fonts don't have to worry if all text on screen is the same size)
 							// Qualitative test results: This can scroll a 4K screen framebuffer (31MB) extremely quickly :D (Interestingly enough, the standard memmove in memmove.c can also do it pretty quickly since GCC vectorizes it.)
-							AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->scale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
+							AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->yscale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
 							if(arg->background_color != 0xFF000000)
 							{
 								AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->y * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - arg->y) * arg->defaultGPU.Info->PixelsPerScanLine);
@@ -838,9 +839,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 						}
 						else // Smooth scroll
 						{
-							uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-							arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
-							// This offset correction is needed in case a font size/scale combination is not an integer multiple of the vertical resolution.
+							uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+							arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
+							// This offset correction is needed in case a font size/yscale combination is not an integer multiple of the vertical resolution.
 							// Even if it is, changing scales or arg->y could cause a variable offset and that needs to be accounted for.
 
 							for(uint64_t smooth = 0; smooth < min_scroll_size; smooth += arg->textscrollmode) // Random: (smooth --> 0) is the same as ((smooth--) > 0); It may not be obvious that they're the same at first glance.
@@ -855,34 +856,31 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 					}
 					else
 					{
-						arg->y += arg->height * arg->scale; // Horizontal wrap means vertical goes down one line -- NOTE: The output render already accounts for PixelsPerScanLine offsets.
+						arg->y += arg->height * arg->yscale; // Horizontal wrap means vertical goes down one line -- NOTE: The output render already accounts for PixelsPerScanLine offsets.
 					}
 				}
 			}
 			break;
 		default:
-			Output_render_text(arg->defaultGPU, output_character, arg->height, arg->width, arg->font_color, arg->highlight_color, arg->x, arg->y, arg->scale, arg->index);
-	//  	Output_render(Global_Print_Info.defaultGPU, output_character, Global_Print_Info.height, Global_Print_Info.width, Global_Print_Info.font_color, Global_Print_Info.highlight_color, Global_Print_Info.x, Global_Print_Info.y, Global_Print_Info.scale, Global_Print_Info.index);
-
+			Output_render_text(arg->defaultGPU, output_character, arg->height, arg->width, arg->font_color, arg->highlight_color, arg->x, arg->y, arg->xscale, arg->yscale, arg->index);
 			arg->index++; // Increment global character index
-	//  	Global_Print_Info.index++; // This should do the same thing.
 
-			if(arg->index * arg->width * arg->scale > (arg->defaultGPU.Info->HorizontalResolution - arg->width * arg->scale)) // Check if text is running off screen
+			if(arg->index * arg->width * arg->xscale > (arg->defaultGPU.Info->HorizontalResolution - arg->width * arg->xscale)) // Check if text is running off screen
 			{
 				arg->index = 0; // Horizontal wraparound
-				if((arg->y + arg->height * arg->scale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale)) // Vertical wraparound if hit the bottom of the screen
+				if((arg->y + arg->height * arg->yscale) > (arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale)) // Vertical wraparound if hit the bottom of the screen
 				{
 					if(!arg->textscrollmode)
 					{
 						arg->y = 0; // Wrap
 					}
-					else if(arg->textscrollmode == arg->height*arg->scale) // Quick Scroll
+					else if(arg->textscrollmode == arg->height*arg->yscale) // Quick Scroll
 					{
 
 #ifdef NEW_QUICK_SCROLL
-						// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * scale) == 0 fonts don't have to worry all text on screen is the same size)
-						uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-						arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
+						// New way (topmost line will be partially scrolled up offscreen, but no color gap under the bottommost text line; VerticalResolution % (height * yscale) == 0 fonts don't have to worry all text on screen is the same size)
+						uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+						arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
 
 						AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * min_scroll_size), (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine*4);
 						if(arg->background_color != 0xFF000000)
@@ -890,9 +888,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 							AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - min_scroll_size) * arg->defaultGPU.Info->PixelsPerScanLine);
 						}
 #else
-						// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * scale) == 0 fonts don't have to worry if all text on screen is the same size)
+						// Old way (gap of background color below the bottommost text line, but no partial scroll up top--the topmost line goes away; VerticalResolution % (height * yscale) == 0 fonts don't have to worry if all text on screen is the same size)
 						// Qualitative test results: This can scroll a 4K screen framebuffer (31MB) extremely quickly :D (Interestingly enough, the standard memmove in memmove.c can also do it pretty quickly since GCC vectorizes it.)
-						AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->scale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
+						AVX_memmove((EFI_PHYSICAL_ADDRESS*)arg->defaultGPU.FrameBufferBase, (EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->defaultGPU.Info->PixelsPerScanLine * 4 * arg->height * arg->yscale), arg->y * arg->defaultGPU.Info->PixelsPerScanLine*4);
 						if(arg->background_color != 0xFF000000)
 						{
 							AVX_memset_4B((EFI_PHYSICAL_ADDRESS*)(arg->defaultGPU.FrameBufferBase + arg->y * arg->defaultGPU.Info->PixelsPerScanLine * 4), arg->background_color, (arg->defaultGPU.Info->VerticalResolution - arg->y) * arg->defaultGPU.Info->PixelsPerScanLine);
@@ -909,9 +907,9 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 					}
 					else // Smooth scroll
 					{
-						uint64_t min_scroll_size = arg->y + 2*arg->height*arg->scale - arg->defaultGPU.Info->VerticalResolution;
-						arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->scale;
-						// This offset correction is needed in case a font size/scale combination is not an integer multiple of the vertical resolution.
+						uint64_t min_scroll_size = arg->y + 2*arg->height*arg->yscale - arg->defaultGPU.Info->VerticalResolution;
+						arg->y = arg->defaultGPU.Info->VerticalResolution - arg->height * arg->yscale;
+						// This offset correction is needed in case a font size/yscale combination is not an integer multiple of the vertical resolution.
 						// Even if it is, changing scales or arg->y could cause a variable offset and that needs to be accounted for.
 
 						for(uint64_t smooth = 0; smooth < min_scroll_size; smooth += arg->textscrollmode) // Random: (smooth --> 0) is the same as ((smooth--) > 0); It may not be obvious that they're the same at first glance.
@@ -926,7 +924,7 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 				}
 				else
 				{
-					arg->y += arg->height * arg->scale; // Horizontal wrap means vertical goes down one line -- NOTE: The output render already accounts for PixelsPerScanLine offsets.
+					arg->y += arg->height * arg->yscale; // Horizontal wrap means vertical goes down one line -- NOTE: The output render already accounts for PixelsPerScanLine offsets.
 				}
 			}
 			break;
@@ -941,7 +939,6 @@ int printf(const char *fmt, ...)
 
 	va_start(ap, fmt);
 	retval = kvprintf(fmt, printf_putchar, &Global_Print_Info, 10, ap); // The third argument is any arguments to be passed to putchar (e.g. &pca - putchar args)
-// retval = kvprintf(fmt, printf_putchar, NULL, 10, ap); // This could work, too (requires using similarly commented code in printf_putchar... Which would be somewhat of a hassle at this point. All those arg->whatever would need to be changed, too!!)
 	va_end(ap);
 
 	return (retval);
@@ -987,7 +984,7 @@ int vsprintf(char *buf, const char *cfmt, va_list ap)
 
 // A print function that's meant to print simple UCS-2 UEFI strings (2 bytes per character) with a 1-byte per character/UTF8 font.
 // Meant to print out CHAR16 strings in the loader params, since printf above doesn't support wide characters.
-void print_utf16_as_utf8(CHAR16 * strung, UINT64 size)
+void print_utf16_as_utf8(CHAR16 * strung, UINT64 size) // size of 'strung'
 {
   for(uint64_t letter = 0; letter < size; letter++)
   {
@@ -998,12 +995,13 @@ void print_utf16_as_utf8(CHAR16 * strung, UINT64 size)
   }
 }
 
-// Takes simple CHAR16 UEFI strings and returns a CHAR8 string of the same contents.
+// Takes simple CHAR16 UEFI strings and returns a CHAR8 string of the same contents, allocated with malloc.
+// "Simple" here means the CHAR16 characters are actually just UTF8 with a zero byte (i.e. NUL & the first 255 UTF16 characters).
 // Meant to work with CHAR16 strings in the loader params, since printf above doesn't support wide characters.
-/*
-char * UCS2_to_UTF8(CHAR16 * strang, UINT64 size) // TODO: need malloc
+// NOTE: Don't forget to free() the returned pointer when done with it!
+char * UCS2_to_UTF8(CHAR16 * strang, UINT64 size) // size of 'strang'
 {
-  char * new_strang = malloc(size >> 1);
+  char * new_strang = (char*) malloc(size >> 1);
   uint8_t zero_count = 0;
   uint64_t new_letter = 0;
 
@@ -1028,4 +1026,94 @@ char * UCS2_to_UTF8(CHAR16 * strang, UINT64 size) // TODO: need malloc
 
   return new_strang;
 }
-*/
+
+// Pick a font color and highlight!
+// The colors will only apply to this specific input string.
+int color_printf(uint32_t fontcolor, uint32_t highlightcolor, const char *fmt, ...)
+{
+	uint32_t prev_font_color = Global_Print_Info.font_color;
+	uint32_t prev_highlight_color = Global_Print_Info.highlight_color;
+	va_list ap;
+	int retval;
+
+	Global_Print_Info.font_color = fontcolor;
+	Global_Print_Info.highlight_color = highlightcolor;
+
+	va_start(ap, fmt);
+	retval = kvprintf(fmt, printf_putchar, &Global_Print_Info, 10, ap); // The third argument is any arguments to be passed to putchar (e.g. &pca - putchar args)
+// retval = kvprintf(fmt, printf_putchar, NULL, 10, ap); // This could work, too (requires using similarly commented code in printf_putchar... Which would be somewhat of a hassle at this point. All those arg->whatever would need to be changed, too!!)
+	va_end(ap);
+
+	Global_Print_Info.font_color = prev_font_color;
+	Global_Print_Info.highlight_color = prev_highlight_color;
+
+	return (retval);
+}
+
+// printf for errors (red text on black highlight)
+int error_printf(const char *fmt, ...)
+{
+	uint32_t prev_font_color = Global_Print_Info.font_color;
+	uint32_t prev_highlight_color = Global_Print_Info.highlight_color;
+	va_list ap;
+	int retval;
+
+	if(Global_Print_Info.defaultGPU.Info->PixelFormat == PixelBlueGreenRedReserved8BitPerColor)
+	{
+		Global_Print_Info.font_color = 0x00FF0000;
+	}
+	else if(Global_Print_Info.defaultGPU.Info->PixelFormat == PixelRedGreenBlueReserved8BitPerColor)
+	{
+		Global_Print_Info.font_color = 0x000000FF;
+	}
+	else if(Global_Print_Info.defaultGPU.Info->PixelFormat == PixelBitMask)
+	{
+		Global_Print_Info.font_color = Global_Print_Info.defaultGPU.Info->PixelInformation.RedMask;
+	}
+	// No else
+	Global_Print_Info.highlight_color = 0x00000000;
+
+	va_start(ap, fmt);
+	retval = kvprintf(fmt, printf_putchar, &Global_Print_Info, 10, ap); // The third argument is any arguments to be passed to putchar (e.g. &pca - putchar args)
+// retval = kvprintf(fmt, printf_putchar, NULL, 10, ap); // This could work, too (requires using similarly commented code in printf_putchar... Which would be somewhat of a hassle at this point. All those arg->whatever would need to be changed, too!!)
+	va_end(ap);
+
+	Global_Print_Info.font_color = prev_font_color;
+	Global_Print_Info.highlight_color = prev_highlight_color;
+
+	return (retval);
+}
+
+// printf for warnings (yellow text on black highlight)
+int warning_printf(const char *fmt, ...)
+{
+	uint32_t prev_font_color = Global_Print_Info.font_color;
+	uint32_t prev_highlight_color = Global_Print_Info.highlight_color;
+	va_list ap;
+	int retval;
+
+	if(Global_Print_Info.defaultGPU.Info->PixelFormat == PixelBlueGreenRedReserved8BitPerColor)
+	{
+		Global_Print_Info.font_color = 0x00FFFF00;
+	}
+	else if(Global_Print_Info.defaultGPU.Info->PixelFormat == PixelRedGreenBlueReserved8BitPerColor)
+	{
+		Global_Print_Info.font_color = 0x0000FFFF;
+	}
+	else if(Global_Print_Info.defaultGPU.Info->PixelFormat == PixelBitMask)
+	{
+		Global_Print_Info.font_color = Global_Print_Info.defaultGPU.Info->PixelInformation.RedMask | Global_Print_Info.defaultGPU.Info->PixelInformation.GreenMask;
+	}
+	// No else
+	Global_Print_Info.highlight_color = 0x00000000;
+
+	va_start(ap, fmt);
+	retval = kvprintf(fmt, printf_putchar, &Global_Print_Info, 10, ap); // The third argument is any arguments to be passed to putchar (e.g. &pca - putchar args)
+// retval = kvprintf(fmt, printf_putchar, NULL, 10, ap); // This could work, too (requires using similarly commented code in printf_putchar... Which would be somewhat of a hassle at this point. All those arg->whatever would need to be changed, too!!)
+	va_end(ap);
+
+	Global_Print_Info.font_color = prev_font_color;
+	Global_Print_Info.highlight_color = prev_highlight_color;
+
+	return (retval);
+}

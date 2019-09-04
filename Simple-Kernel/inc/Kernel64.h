@@ -2,7 +2,7 @@
 //  Simple Kernel: Main Header
 //==================================================================================================================================
 //
-// Version 0.z
+// Version 0.8
 //
 // Author:
 //  KNNSpeed
@@ -18,7 +18,7 @@
 #define _Kernel64_H
 
 #define MAJOR_VER 0
-#define MINOR_VER 9
+#define MINOR_VER 8
 
 // In freestanding mode, the only available standard header files are: <float.h>,
 // <iso646.h>, <limits.h>, <stdarg.h>, <stdbool.h>, <stddef.h>, and <stdint.h>
@@ -42,6 +42,10 @@
 #include "EfiBind.h"
 #include "EfiTypes.h"
 #include "EfiError.h"
+
+// SmBios.h has a very specific reference to type 'GUID,' which is normally defined by EDK2's build system.
+typedef EFI_GUID GUID; // Defining it here instead. This allows SmBios.h to be replaced with an updated version without modification.
+#include "SmBios.h"
 
 #include "avxmem.h"
 #include "ISR.h"
@@ -447,7 +451,9 @@ typedef struct {
   UINT32                             background_color; // Default background color
 	UINT32                             x;                // Leftmost x-coord that's in-bounds (NOTE: per UEFI Spec 2.7 Errata A, (0,0) is always the top left in-bounds pixel.)
 	UINT32                             y;                // Topmost y-coord
-	UINT32                             scale;            // Output scale for systemfont used by printf
+	UINT32                             xscale;           // Output width scale for systemfont used by printf
+  UINT32                             yscale;           // Output height scale for systemfont used by printf
+  UINT32                             Reserved;         // Reserved for future use.
   UINT32                             index;            // Global string index for printf, etc. to keep track of cursor's postion in the framebuffer
   UINT32                             textscrollmode;   // What to do when a newline goes off the bottom of the screen: 0 = scroll entire screen, 1 = wrap around to the top
 } GLOBAL_PRINT_INFO_STRUCT;
@@ -546,6 +552,36 @@ typedef struct __attribute__ ((packed)) {
 
 // See ISR.h for the specific interrupt structures
 
+// A structure to keep track of information about a hardware page
+// Meant for use with get_page()/vget_page() and for passing its members to set_page()/vset_page()
+typedef struct {
+  uint64_t               PageTableEntryData;
+  uint64_t               HWPageSize;
+  uint64_t               WholePageInRegion;
+  EFI_MEMORY_DESCRIPTOR  MemoryMapRegionData;
+} PAGE_ENTRY_INFO_STRUCT;
+
+#define PAGE_ENTRY_ADDRESS_MASK 0x000FFFFFFFFFF000
+#define PAGE_ENTRY_FLAGS_MASK   0xFFF0000000001FFF
+
+#define PML5_MASK 0x000F000000000000
+#define PML4_MASK 0x0000FF8000000000
+#define PML3_MASK 0x0000007FC0000000
+#define PML2_MASK 0x000000003FE00000
+#define PML1_MASK 0x00000000001FF000
+
+#define PML5_ADDRESS_MASK (PML5_MASK)
+#define PML4_ADDRESS_MASK (PML5_MASK | PML4_MASK)
+#define PML3_ADDRESS_MASK (PML5_MASK | PML4_MASK | PML3_MASK)
+#define PML2_ADDRESS_MASK (PML5_MASK | PML4_MASK | PML3_MASK | PML2_MASK)
+#define PML1_ADDRESS_MASK (PML5_MASK | PML4_MASK | PML3_MASK | PML2_MASK | PML1_MASK)
+
+#define PML5_SHIFT 48
+#define PML4_SHIFT 39
+#define PML3_SHIFT 30
+#define PML2_SHIFT 21
+#define PML1_SHIFT 12
+
 // ACPI Structures
 // ACPI Specification 6.2A, section 5.2.5 (Root System Description Pointer (RSDP))
 typedef struct __attribute__((packed)) {
@@ -590,8 +626,7 @@ extern GLOBAL_PRINT_INFO_STRUCT Global_Print_Info;
 
 // Because kernel_main() is a naked function and can't have local variables that would require stack space...
 extern unsigned char swapped_image[];
-extern char brandstring[];
-extern char Manufacturer_ID[];
+extern unsigned char swapped_image2[];
 
 //----------------------------------------------------------------------------------------------------------------------------------
 //  Function Prototypes
@@ -612,12 +647,12 @@ uint8_t Hypervisor_check(void);
 uint8_t read_perfs_initial(uint64_t * perfs);
 uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure);
 
-uint32_t portio_rw(uint16_t port_address, uint32_t data, int size, int rw);
-uint64_t msr_rw(uint64_t msr, uint64_t data, int rw);
-uint32_t vmxcsr_rw(uint32_t data, int rw);
-uint32_t mxcsr_rw(uint32_t data, int rw);
-uint64_t control_register_rw(int crX, uint64_t in_out, int rw);
-uint64_t xcr_rw(uint64_t xcrX, uint64_t data, int rw);
+uint32_t portio_rw(uint16_t port_address, uint32_t data, uint8_t size, uint8_t rw);
+uint64_t msr_rw(uint64_t msr, uint64_t data, uint8_t rw);
+uint32_t vmxcsr_rw(uint32_t data, uint8_t rw);
+uint32_t mxcsr_rw(uint32_t data, uint8_t rw);
+uint64_t control_register_rw(int crX, uint64_t in_out, uint8_t rw);
+uint64_t xcr_rw(uint64_t xcrX, uint64_t data, uint8_t rw);
 uint64_t read_cs(void);
 
 DT_STRUCT get_gdtr(void);
@@ -691,6 +726,7 @@ uint64_t GetMaxMappedPhysicalAddress(void);
 uint64_t GetVisibleSystemRam(void);
 uint64_t GetFreeSystemRam(void);
 uint64_t GetFreePersistentRam(void);
+uint64_t GetInstalledSystemRam(EFI_CONFIGURATION_TABLE * ConfigurationTables, UINTN NumConfigTables);
 uint64_t GuessInstalledSystemRam(void);
 void print_system_memmap(void);
 EFI_MEMORY_DESCRIPTOR * Set_Identity_VMAP(EFI_RUNTIME_SERVICES * RTServices);
@@ -699,37 +735,48 @@ void ReclaimEfiBootServicesMemory(void);
 void ReclaimEfiLoaderCodeMemory(void);
 void MergeContiguousConventionalMemory(void);
 EFI_PHYSICAL_ADDRESS ZeroAllConventionalMemory(void);
+uint64_t MemMap_Prep(uint64_t num_additional_descriptors);
 EFI_PHYSICAL_ADDRESS pagetable_alloc(uint64_t pagetables_size);
 
   // For physical addresses
 __attribute__((malloc)) void * malloc(size_t numbytes);
+void * calloc(size_t elements, size_t size);
+void * realloc(void * allocated_address, size_t size);
+void free(void * allocated_address);
+PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr);
+uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint64_t attributes, uint8_t flags_or_entry);
 
-__attribute__((malloc)) void * malloc16(size_t numbytes);
-__attribute__((malloc)) void * malloc32(size_t numbytes);
-__attribute__((malloc)) void * malloc64(size_t numbytes);
-__attribute__((malloc)) void * malloc4k(size_t pages);
+__attribute__((malloc)) void * malloc4KB(size_t numbytes);
+__attribute__((malloc)) void * malloc2MB(size_t numbytes);
+__attribute__((malloc)) void * malloc1GB(size_t numbytes);
+__attribute__((malloc)) void * malloc512GB(size_t numbytes);
+__attribute__((malloc)) void * malloc256TB(size_t numbytes);
 
 EFI_PHYSICAL_ADDRESS ActuallyFreeAddress(size_t pages, EFI_PHYSICAL_ADDRESS OldAddress);
 EFI_PHYSICAL_ADDRESS ActuallyFreeAddressByPage(size_t pages, EFI_PHYSICAL_ADDRESS OldAddress);
-EFI_PHYSICAL_ADDRESS AllocateFreeAddressByPage(size_t pages, EFI_PHYSICAL_ADDRESS OldAddress);
-EFI_PHYSICAL_ADDRESS AllocateFreeAddressBy16Bytes(size_t numbytes, EFI_PHYSICAL_ADDRESS OldAddress);
-EFI_PHYSICAL_ADDRESS AllocateFreeAddressBy32Bytes(size_t numbytes, EFI_PHYSICAL_ADDRESS OldAddress);
-EFI_PHYSICAL_ADDRESS AllocateFreeAddressBy64Bytes(size_t numbytes, EFI_PHYSICAL_ADDRESS OldAddress);
+EFI_PHYSICAL_ADDRESS ActuallyAlignedFreeAddress(size_t pages, EFI_PHYSICAL_ADDRESS OldAddress, uintmax_t byte_alignment);
+
+EFI_PHYSICAL_ADDRESS AllocateFreeAddress(size_t numbytes, EFI_PHYSICAL_ADDRESS OldAddress, uintmax_t byte_alignment);
 
   // For virtual addresses
-__attribute__((malloc)) void * Vmalloc(size_t numbytes);
+__attribute__((malloc)) void * vmalloc(size_t numbytes);
+void * vcalloc(size_t elements, size_t size);
+void * vrealloc(void * allocated_address, size_t size);
+void vfree(void * allocated_address);
+PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr);
+uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint64_t attributes, uint8_t flags_or_entry);
 
-__attribute__((malloc)) void * Vmalloc16(size_t numbytes);
-__attribute__((malloc)) void * Vmalloc32(size_t numbytes);
-__attribute__((malloc)) void * Vmalloc64(size_t numbytes);
-__attribute__((malloc)) void * Vmalloc4k(size_t pages);
+__attribute__((malloc)) void * vmalloc4KB(size_t numbytes);
+__attribute__((malloc)) void * vmalloc2MB(size_t numbytes);
+__attribute__((malloc)) void * vmalloc1GB(size_t numbytes);
+__attribute__((malloc)) void * vmalloc512GB(size_t numbytes);
+__attribute__((malloc)) void * vmalloc256TB(size_t numbytes);
 
 EFI_VIRTUAL_ADDRESS VActuallyFreeAddress(size_t pages, EFI_VIRTUAL_ADDRESS OldAddress);
 EFI_VIRTUAL_ADDRESS VActuallyFreeAddressByPage(size_t pages, EFI_VIRTUAL_ADDRESS OldAddress);
-EFI_VIRTUAL_ADDRESS VAllocateFreeAddressByPage(size_t pages, EFI_VIRTUAL_ADDRESS OldAddress);
-EFI_VIRTUAL_ADDRESS VAllocateFreeAddressBy16Bytes(size_t numbytes, EFI_VIRTUAL_ADDRESS OldAddress);
-EFI_VIRTUAL_ADDRESS VAllocateFreeAddressBy32Bytes(size_t numbytes, EFI_VIRTUAL_ADDRESS OldAddress);
-EFI_VIRTUAL_ADDRESS VAllocateFreeAddressBy64Bytes(size_t numbytes, EFI_VIRTUAL_ADDRESS OldAddress);
+EFI_VIRTUAL_ADDRESS VActuallyAlignedFreeAddress(size_t pages, EFI_VIRTUAL_ADDRESS OldAddress, uintmax_t byte_alignment);
+
+EFI_VIRTUAL_ADDRESS VAllocateFreeAddress(size_t numbytes, EFI_VIRTUAL_ADDRESS OldAddress, uintmax_t byte_alignment);
 
 // Drawing-related functions (Display.c)
 void Blackscreen(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU);
@@ -740,8 +787,8 @@ void Resetdefaultscreen(void);
 
 void single_pixel(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x, UINT32 y, UINT32 color);
 
-void bitmap_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 scale);
-void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 scale, UINT32 index);
+void bitmap_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
+void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
 
 void bitmap_bitswap(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output);
 void bitmap_bitreverse(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output);
@@ -752,11 +799,11 @@ void Initialize_Global_Printf_Defaults(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU);
 
 void single_char(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color);
 void single_char_anywhere(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y);
-void single_char_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 scale);
+void single_char_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
 
-void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * string, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 scale);
-void formatted_string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 scale, const char * string, ...);
-void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 scale, UINT32 index);
+void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * string, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
+void formatted_string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, const char * string, ...);
+void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
 
 // Printf-related functions (Print.c)
 int snprintf(char *str, size_t size, const char *format, ...);
@@ -768,6 +815,11 @@ int vsprintf(char *buf, const char *cfmt, va_list ap);
 int printf(const char *fmt, ...);
 int vprintf(const char *fmt, va_list ap);
 int kvprintf(char const *fmt, void (*func)(int, void*), void *arg, int radix, va_list ap);
+
+int color_printf(uint32_t fontcolor, uint32_t highlightcolor, const char *fmt, ...);
+int error_printf(const char *fmt, ...);
+int warning_printf(const char *fmt, ...);
+
 
 void print_utf16_as_utf8(CHAR16 * strung, UINT64 size);
 char * UCS2_to_UTF8(CHAR16 * strang, UINT64 size);

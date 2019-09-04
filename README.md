@@ -1,15 +1,15 @@
 # Simple Kernel Development Framework
 A minimal, cross-platform development environment for building bare-metal x86-64 programs, kernels, and/or full operating systems on UEFI 2.x systems. It is primarily designed to make programs for use with https://github.com/KNNSpeed/Simple-UEFI-Bootloader.
 
-**Version 0.z (not considered "release-ready" until 1.0)**
+**Version 0.8 (not considered "release-ready" until 1.0)**
 
-The included build system compiles operating system kernels or bare metal programs as native executables for the builder's platform (Windows, Mac, or Linux), which can then be loaded by the bootloader. A kernel framework, containing a software renderer, flexible text output, multi-GPU graphical support, and a whole host of low-level system control functions, is also included, and many of the provided support functions feature full AVX optimization for x86-64.
+The included build system compiles operating system kernels or bare metal programs as native executables for the builder's platform (Windows, Mac, or Linux), which can then be loaded by the bootloader. A kernel framework containing a software renderer, flexible text output, multi-GPU graphical support, and a whole host of low-level system control functions is also included. Many of the provided support functions feature full AVX optimization for x86-64, as well, making them **extremely** fast.  
 
-See Simple_Kernel/inc/Kernel64.h, Simple_Kernel/inc/ISR.h, and Simple_Kernel/startup/avxmem.h for complete function listings. Detailed descriptions are provided for each function in the functions' corresponding .c files (or .S file in the case of ISRs).
+See Simple_Kernel/inc/Kernel64.h, Simple_Kernel/inc/ISR.h, and Simple_Kernel/startup/avxmem.h for complete function listings. Detailed descriptions are provided for each function in the functions' corresponding .c files (or .S file in the case of ISRs).  
 
 See "Issues" for my to-do list before hitting "official release-ready" version 1.0, and see the "Releases" tab of this project for executable demos. See the "Building an OS Kernel/Bare-Metal x86-64 Application" and "How to Build from Source" sections below for details on how to use this project.  
 
-*Apologies to AMD Ryzen users: I can't test Ryzen-optimized binaries very thoroughly as I don't have any Ryzen machines. The build scripts are provided with the caveat that they ought to produce optimized binaries (I don't see why they wouldn't).*
+*Apologies to AMD Ryzen users: I can't test Ryzen-optimized binaries very thoroughly as I don't have any Ryzen machines. The build scripts are provided with the caveat that they ought to produce optimized binaries (I don't see why they wouldn't).*  
 
 ## Features
 
@@ -21,8 +21,10 @@ This project is designed to inherit all of the features provided by https://gith
 - Unrestricted access to available hardware ***(2)***
 - Minimal development environment tuned for Windows, Mac, and Linux included in repository (can be used with the same Backend folder as the bootloader, barring differences in compiler version requirements)  
 
-***(1)*** A CPU with AVX is required to use most of the above functionality, see "Target System Requirements" below to see where to check if you have it. Most post-2011 systems do.  
-***(2)*** You will need to write your own interfaces (essentially drivers or kernel extensions, depending on the term you're most familiar with) for access to more advanced hardware. I don't yet have drivers for things like PCI-Express, and things like on-board audio differ wildly between systems. Remember: this is not an operating system, this is meant to help make them and other kinds of bare-metal/operating system-less programs.  
+***(1)*** A CPU with AVX is required to use most of the included functionality, see "Target System Requirements" below to see where to check if you have it.  
+***(2)*** You will need to write your own interfaces (essentially drivers or kernel extensions, depending on the term you're most familiar with) for access to more advanced hardware. I don't yet have drivers for things like PCI-Express, and things like on-board audio differ wildly between systems. Remember: this is not an operating system, this is meant to help make them and other kinds of bare-metal/operating system-less programs. If anyone has had the need or desire to port an application to run with no OS in the way (e.g. to ditch the licensing costs or performance overhead that might be associated with using an OS), this could really help with that.  
+
+// TODO: "Features for printing" "Features for memory management" "Features for drawing to the screen" "Features for low-level system control" "Features for interrupt handling" ... etc. There's a **lot** of stuff here. Maybe make a wiki page.
 
 ## Target System Requirements  
 
@@ -30,13 +32,17 @@ This project is designed to inherit all of the features provided by https://gith
 
 - x86-64 architecture with AVX (most Intel ix-2xxx or newer or AMD Ryzen or newer CPUs have it, see [the Wikipedia page on AVX](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX))
 - Secure Boot must be disabled  
-- More than 4GB RAM (though it seems to work OK with less, e.g. Hyper-V with only 1GB)  
-- A graphics card (Intel, AMD, NVidia, etc.) **with UEFI GOP support**  
+- At least 1GB total system RAM *per logical core*, with the total size being a whole number of GB ***(1)***  
+- At least 1 graphics card (Intel, AMD, NVidia, etc.) **with UEFI GOP support**  
 - A keyboard  
 
 The earliest GPUs with UEFI GOP support were released around the Radeon HD 7xxx series (~2011). Anything that age or newer should have UEFI GOP support, though older models, like early 7970s, required owners to contact GPU vendors to get UEFI-compatible firmware. On Windows, you can check if your graphics card(s) have UEFI GOP support by downloading TechPowerUp's GPU-Z utility and seeing whether or not the UEFI checkbox is checked. If it is, you're all set!  
 
-*NOTE: You need to check each graphics card if there is a mix, as you will only be able to use the ones with UEFI GOP support. Per the system requirements above, you need at least one compliant device.*  
+*NOTE: You need to check each graphics card if there is a mix, as you will only be able to use the ones with UEFI GOP support. Per the system requirements above, you need at least one compliant device. Multiple devices are supported per https://github.com/KNNSpeed/Simple-UEFI-Bootloader.*  
+
+**IMPORTANT VM INFO:** If using a hypervisor like Microsoft's Hyper-V, use a generation 2 VM with configuration version 9.0 or higher and turn off "Dynamic Memory" in the VM's settings. 4GB RAM is the minimum that must be assigned to the VM regardless of core count; using less RAM causes the VM to crash while setting up identity mapped page tables with 1GB page sizes.
+
+***(1)*** Any extra halves or 3/4s, etc. will simply be ignored, so use, e.g., 9GB or 10GB instead of 9.5GB. For an Intel/AMD 4-core with hyperthreading/SMT turned on, use 8GB RAM, otherwise 4GB with it off. Note that some of the more advanced multi-core functionality is not usable without 1GB+ per core. Also, when using multi-core "RAM partitioning," cores can only be assigned whole numbers of GBs of RAM, not, e.g. 12GB divided by 8 cores into 1.5GB per core--in a situation like this 4GB might need to be used as shared pages, or 4 cores get 2GB and the other 4 get 1GB, etc.  
 
 ## License and Crediting  
 
@@ -44,7 +50,7 @@ Please see the LICENSE file for information on all licenses covering code create
 
 ***TL;DR:***  
 
-If you don't give credit to this project, per the license you aren't allowed to do anything with any of its source code that isn't already covered by an existing license (in other words, my license covers most of the code I wrote). That's pretty much it, and why it's "almost" PD, or "PD with Credit" if I have to give it a nickname, as there's no restriction on what it gets used for as long as the license is satisfied. If you have any issues, feature requests, etc. please post in "Issues" so it can be attended to/fixed.  
+If you don't give credit to this project, per the license you aren't allowed to do anything with any of its source code that isn't already covered by an existing license (in other words, my license covers most of the code I wrote). That's pretty much it, and why it's "almost" PD, or "PD with Credit" if I have to give it a nickname: there's no restriction on what it gets used for as long as the license is satisfied. If you have any issues, feature requests, etc. please post in "Issues" so it can be attended to/fixed.  
 
 Note that each of these files already has appropriate crediting at the top, so you could just leave what's already there to satisfy the terms. You really should see the license file for complete information, though (it's short!!).  
 
@@ -66,28 +72,30 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 The LOADER_PARAMS data type is defined as the following structure:
 ```
 typedef struct {
-  UINT16                  Bootloader_MajorVersion;        // The major version of the bootloader
-  UINT16                  Bootloader_MinorVersion;        // The minor version of the bootloader
+  UINT32                    UEFI_Version;                   // The system UEFI version
+  UINT32                    Bootloader_MajorVersion;        // The major version of the bootloader
+  UINT32                    Bootloader_MinorVersion;        // The minor version of the bootloader
 
-  UINT32                  Memory_Map_Descriptor_Version;  // The memory descriptor version
-  UINTN                   Memory_Map_Descriptor_Size;     // The size of an individual memory descriptor
-  EFI_MEMORY_DESCRIPTOR  *Memory_Map;                     // The system memory map as an array of EFI_MEMORY_DESCRIPTOR structs
-  UINTN                   Memory_Map_Size;                // The total size of the system memory map
+  UINT32                    Memory_Map_Descriptor_Version;  // The memory descriptor version
+  UINTN                     Memory_Map_Descriptor_Size;     // The size of an individual memory descriptor
+  EFI_MEMORY_DESCRIPTOR    *Memory_Map;                     // The system memory map as an array of EFI_MEMORY_DESCRIPTOR structs
+  UINTN                     Memory_Map_Size;                // The total size of the system memory map
 
-  EFI_PHYSICAL_ADDRESS    Kernel_BaseAddress;             // The base memory address of the loaded kernel file
-  UINTN                   Kernel_Pages;                   // The number of pages (1 page == 4096 bytes) allocated for the kernel file
+  EFI_PHYSICAL_ADDRESS      Kernel_BaseAddress;             // The base memory address of the loaded kernel file
+  UINTN                     Kernel_Pages;                   // The number of pages (1 page == 4096 bytes) allocated for the kernel file
 
-  CHAR16                 *ESP_Root_Device_Path;           // A UTF-16 string containing the drive root of the EFI System Partition as converted from UEFI device path format
-  UINT64                  ESP_Root_Size;                  // The size (in bytes) of the above ESP root string
-  CHAR16                 *Kernel_Path;                    // A UTF-16 string containing the kernel's file path relative to the EFI System Partition root (it's the first line of Kernel64.txt)
-  UINT64                  Kernel_Path_Size;               // The size (in bytes) of the above kernel file path
-  CHAR16                 *Kernel_Options;                 // A UTF-16 string containing various load options (it's the second line of Kernel64.txt)
-  UINT64                  Kernel_Options_Size;            // The size (in bytes) of the above load options string
+  CHAR16                   *ESP_Root_Device_Path;           // A UTF-16 string containing the drive root of the EFI System Partition as converted from UEFI device path format
+  UINT64                    ESP_Root_Size;                  // The size (in bytes) of the above ESP root string
+  CHAR16                   *Kernel_Path;                    // A UTF-16 string containing the kernel's file path relative to the EFI System Partition root (it's the first line of Kernel64.txt)
+  UINT64                    Kernel_Path_Size;               // The size (in bytes) of the above kernel file path
+  CHAR16                   *Kernel_Options;                 // A UTF-16 string containing various load options (it's the second line of Kernel64.txt)
+  UINT64                    Kernel_Options_Size;            // The size (in bytes) of the above load options string
 
-  EFI_RUNTIME_SERVICES   *RTServices;                     // UEFI Runtime Services
-  GPU_CONFIG             *GPU_Configs;                    // Information about available graphics output devices; see below GPU_CONFIG struct for details
-  EFI_FILE_INFO          *FileMeta;                       // Kernel file metadata
-  void                   *RSDP;                           // A pointer to the RSDP ACPI table
+  EFI_RUNTIME_SERVICES     *RTServices;                     // UEFI Runtime Services
+  GPU_CONFIG               *GPU_Configs;                    // Information about available graphics output devices; see below GPU_CONFIG struct for details
+  EFI_FILE_INFO            *FileMeta;                       // Kernel file metadata
+  EFI_CONFIGURATION_TABLE  *ConfigTables;                   // UEFI-installed system configuration tables (ACPI, SMBIOS, etc.)
+  UINTN                     Number_of_ConfigTables;         // The number of system configuration tables
 } LOADER_PARAMS;
 ```
 
@@ -174,6 +182,8 @@ I cannot make any guarantees whatsoever for earlier versions, especially with th
 
 ## Change Log  
 
+V0.8 (9/4/2019) - Major update: Memory management subsystem added (paging, malloc/calloc/realloc/free, AllocateFreeAddress). GDT, IDT & interrupts/exceptions implemented (even AVX state can be saved during interrupts!), stack set up (previously this was still using the UEFI's stack), fixed AVX_memmove alignment issue, Bootloader V2.x compatibility, fixed MinGW PE relocation issue, fonts and bitmaps now have independent x- and y-scaling factors, optimized output renderers, fixed tons of bugs, moved everything that needs to be moved out of EfiBootServicesCode/Data, added lots and lots of new functions (especially memory-related ones). New binaries will be made whenever issue #19 is resolved.
+
 V0.z (2/20/2019) - Major update: AVX is now required, separated code out of code files, added a TON of low-level system control functions (port I/O, control register manipulation, HWP support for systems supporting it, cpu feature checks), added CPU frequency measurement (average since boot and for specific user-defined code segments), updated text printing to include wraparound, smooth scrolling, and quick-scrolling, and prettied up code styling. Also, spun-off a new project from this one: https://github.com/KNNSpeed/AVX-Memmove
 
 V0.y (2/1/2019) - Major code cleanup, added printf() and a whole host of text-displaying functions, resolved issues #5 and #6. No new binaries will be made for this version.
@@ -182,10 +192,15 @@ V0.x (2/2/2018) - Initial upload of environment and compilable sample. Not yet g
 
 ## Acknowledgements  
 
+- [Intel Corporation](https://www.intel.com/content/www/us/en/homepage.html) and [Advanced Micro Devices, Inc.](https://www.amd.com/en) for their x86 architecture programming manuals, which have been instrumental in the development of this project. [Intel's docs.](https://software.intel.com/en-us/articles/intel-sdm) [AMD's docs.](https://developer.amd.com/resources/developer-guides-manuals/) [Intel's AVX Intrinsics Guide.](https://software.intel.com/sites/landingpage/IntrinsicsGuide/)
+- [OSDev Wiki](http://wiki.osdev.org/Main_Page) for its wealth of available information
+- [The FreeBSD Project](https://www.freebsd.org/) for maintaining subr_prf.c, from which freestanding print functions--like the one in this project--can easily be made (credit to [Michael Steil's "A Standalone printf() for Early Bootup"](https://www.pagetable.com/?p=298) for the idea to do something like this)
 - [The Data Plane Development Kit project](https://www.dpdk.org/about/) for open-source examples of various really useful optimizations.
+- [Philipp Oppermann](https://os.phil-opp.com/) for in-depth explanations and graphics illustrating various x86 constructs (the [section on x86-64 paging](https://os.phil-opp.com/paging-introduction/#paging-on-x86-64) is a particularly useful reference!)
 - [Agner Fog](https://www.agner.org/) for [amazing software optimization resources](https://www.agner.org/optimize/).
 - [Marcel Sondaar](https://mysticos.combuster.nl/) for the original public domain 8x8 font
 - [Daniel Hepper](https://github.com/dhepper/) for converting the 8x8 font into [public domain C headers](https://github.com/dhepper/font8x8)
+- [James Molloy](http://www.jamesmolloy.co.uk/tutorial_html/) for [demonstrating assembly macros for use in generating hundreds of interrupts](http://www.jamesmolloy.co.uk/tutorial_html/4.-The%20GDT%20and%20IDT.html)
 - [Intel Corporation](https://www.intel.com/content/www/us/en/homepage.html) for EfiTypes.h, the x86-64 EfiBind.h, and EfiError.h (the ones used in this project are derived from [TianoCore EDK II](https://github.com/tianocore/edk2/))
 - [UEFI Forum](http://www.uefi.org/) for the [UEFI Specification Version 2.7 (Errata A)](http://www.uefi.org/sites/default/files/resources/UEFI%20Spec%202_7_A%20Sept%206.pdf), as well as for [previous UEFI 2.x specifications](http://www.uefi.org/specifications)
 - [PhoenixWiki](http://wiki.phoenix.com/wiki/index.php/Category:UEFI) for very handy documentation on UEFI functions

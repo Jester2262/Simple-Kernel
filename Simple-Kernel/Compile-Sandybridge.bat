@@ -172,9 +172,9 @@ rem
 rem NOTE: Linkerscripts may be needed for bigger projects
 rem
 
-rem MINGW-w64 has a pretty serious issue where it strips relocation tables by default for PE images by default. Using -Wl,--dynamicbase,--export-all-symbols prevents it from doing so.
+rem MinGW-w64 has a pretty serious issue where it strips relocation tables by default for PE images by default. Using -Wl,--dynamicbase,--export-all-symbols prevents it from doing so.
 rem This is also needed for ASLR compatibility, as ASLR and kernel loading are basically the same...
-rem This is why many UEFI build systems using MINGW-w64 pass -Wl,-dll to the linker, since DLLs are by definition relocatable and thus need to keep the reloc table.
+rem This is why many UEFI build systems using MinGW-w64 pass -Wl,-dll to the linker, since DLLs are by definition relocatable and thus need to keep the reloc table.
 rem
 rem See these links for more details:
 rem https://stackoverflow.com/questions/19451652/mingw-relocation-table
