@@ -2,7 +2,7 @@
 #
 # =================================
 #
-# RELEASE VERSION 1.1
+# RELEASE VERSION 1.11
 #
 # GCC Kernel64 Linux Cleanup Script
 #
@@ -35,6 +35,7 @@ cd ../Backend
 
 rm Kernel64.elf
 rm Kernel64-Sandybridge.elf
+rm Kernel64-Ryzen.elf
 rm output.map
 rm objects.list
 

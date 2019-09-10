@@ -26,7 +26,7 @@ void * memset (void *dest, const uint8_t val, size_t len)
 //  AVX Memory Functions: AVX Memset
 //==============================================================================
 //
-// Version 1.4
+// Version 1.5
 //
 // Author:
 //  KNNSpeed
@@ -2468,7 +2468,7 @@ void * memset_large_4B(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_32bit(dest, val, numbytes_div_4);
       offset = numbytes_div_4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 = 0;
     }
 #ifdef __AVX512F__
@@ -2476,63 +2476,63 @@ void * memset_large_4B(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_128bit_u(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 2);
       offset = numbytes_div_4 & -4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 3;
     }
     else if(numbytes_div_4 < 16) // 32 bytes
     {
       memset_256bit_u(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 3);
       offset = numbytes_div_4 & -8;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 7;
     }
     else if(numbytes_div_4 < 32) // 64 bytes
     {
       memset_512bit_u(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 4);
       offset = numbytes_div_4 & -16;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 15;
     }
     else if(numbytes_div_4 < 64) // 128 bytes
     {
       memset_512bit_128B_u(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 5);
       offset = numbytes_div_4 & -32;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 31;
     }
     else if(numbytes_div_4 < 128) // 256 bytes
     {
       memset_512bit_256B_u(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 6);
       offset = numbytes_div_4 & -64;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 63;
     }
     else if(numbytes_div_4 < 256) // 512 bytes
     {
       memset_512bit_512B_u(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 7);
       offset = numbytes_div_4 & -128;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 127;
     }
     else if(numbytes_div_4 < 512) // 1024 bytes (1 kB)
     {
       memset_512bit_1kB_u(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 8);
       offset = numbytes_div_4 & -256;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 255;
     }
     else if(numbytes_div_4 < 1024) // 2048 bytes (2 kB)
     {
       memset_512bit_2kB_u(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 9);
       offset = numbytes_div_4 & -512;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 511;
     }
     else // 4096 bytes (4 kB)
     {
       memset_512bit_4kB_u(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 10);
       offset = numbytes_div_4 & -1024;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 1023;
     }
 #elif __AVX__
@@ -2540,42 +2540,42 @@ void * memset_large_4B(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_128bit_u(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 2);
       offset = numbytes_div_4 & -4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 3;
     }
     else if(numbytes_div_4 < 16) // 32 bytes
     {
       memset_256bit_u(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 3);
       offset = numbytes_div_4 & -8;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 7;
     }
     else if(numbytes_div_4 < 32) // 64 bytes
     {
       memset_256bit_64B_u(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 4);
       offset = numbytes_div_4 & -16;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 15;
     }
     else if(numbytes_div_4 < 64) // 128 bytes
     {
       memset_256bit_128B_u(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 5);
       offset = numbytes_div_4 & -32;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 31;
     }
     else if(numbytes_div_4 < 128) // 256 bytes
     {
       memset_256bit_256B_u(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 6);
       offset = numbytes_div_4 & -64;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 63;
     }
     else // 512 bytes
     {
       memset_256bit_512B_u(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 7);
       offset = numbytes_div_4 & -128;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 127;
     }
 #else // SSE2 only
@@ -2583,35 +2583,35 @@ void * memset_large_4B(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_128bit_u(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 2);
       offset = numbytes_div_4 & -4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 3;
     }
     else if(numbytes_div_4 < 16) // 32 bytes
     {
       memset_128bit_32B_u(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 3);
       offset = numbytes_div_4 & -8;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 7;
     }
     else if(numbytes_div_4 < 32) // 64 bytes
     {
       memset_128bit_64B_u(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 4);
       offset = numbytes_div_4 & -16;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 15;
     }
     else if(numbytes_div_4 < 64) // 128 bytes
     {
       memset_128bit_128B_u(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 5);
       offset = numbytes_div_4 & -32;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 31;
     }
     else // 256 bytes
     {
       memset_128bit_256B_u(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 6);
       offset = numbytes_div_4 & -64;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 63;
     }
 #endif
@@ -2634,7 +2634,7 @@ void * memset_large_4B_a(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_32bit(dest, val, numbytes_div_4);
       offset = numbytes_div_4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 = 0;
     }
 #ifdef __AVX512F__
@@ -2642,63 +2642,63 @@ void * memset_large_4B_a(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_128bit_a(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 2);
       offset = numbytes_div_4 & -4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 3;
     }
     else if(numbytes_div_4 < 16) // 32 bytes
     {
       memset_256bit_a(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 3);
       offset = numbytes_div_4 & -8;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 7;
     }
     else if(numbytes_div_4 < 32) // 64 bytes
     {
       memset_512bit_a(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 4);
       offset = numbytes_div_4 & -16;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 15;
     }
     else if(numbytes_div_4 < 64) // 128 bytes
     {
       memset_512bit_128B_a(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 5);
       offset = numbytes_div_4 & -32;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 31;
     }
     else if(numbytes_div_4 < 128) // 256 bytes
     {
       memset_512bit_256B_a(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 6);
       offset = numbytes_div_4 & -64;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 63;
     }
     else if(numbytes_div_4 < 256) // 512 bytes
     {
       memset_512bit_512B_a(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 7);
       offset = numbytes_div_4 & -128;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 127;
     }
     else if(numbytes_div_4 < 512) // 1024 bytes (1 kB)
     {
       memset_512bit_1kB_a(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 8);
       offset = numbytes_div_4 & -256;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 255;
     }
     else if(numbytes_div_4 < 1024) // 2048 bytes (2 kB)
     {
       memset_512bit_2kB_a(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 9);
       offset = numbytes_div_4 & -512;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 511;
     }
     else // 4096 bytes (4 kB)
     {
       memset_512bit_4kB_a(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 10);
       offset = numbytes_div_4 & -1024;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 1023;
     }
 #elif __AVX__
@@ -2706,42 +2706,42 @@ void * memset_large_4B_a(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_128bit_a(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 2);
       offset = numbytes_div_4 & -4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 3;
     }
     else if(numbytes_div_4 < 16) // 32 bytes
     {
       memset_256bit_a(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 3);
       offset = numbytes_div_4 & -8;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 7;
     }
     else if(numbytes_div_4 < 32) // 64 bytes
     {
       memset_256bit_64B_a(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 4);
       offset = numbytes_div_4 & -16;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 15;
     }
     else if(numbytes_div_4 < 64) // 128 bytes
     {
       memset_256bit_128B_a(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 5);
       offset = numbytes_div_4 & -32;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 31;
     }
     else if(numbytes_div_4 < 128) // 256 bytes
     {
       memset_256bit_256B_a(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 6);
       offset = numbytes_div_4 & -64;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 63;
     }
     else // 512 bytes
     {
       memset_256bit_512B_a(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 7);
       offset = numbytes_div_4 & -128;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 127;
     }
 #else // SSE2 only
@@ -2749,35 +2749,35 @@ void * memset_large_4B_a(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_128bit_a(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 2);
       offset = numbytes_div_4 & -4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 3;
     }
     else if(numbytes_div_4 < 16) // 32 bytes
     {
       memset_128bit_32B_a(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 3);
       offset = numbytes_div_4 & -8;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 7;
     }
     else if(numbytes_div_4 < 32) // 64 bytes
     {
       memset_128bit_64B_a(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 4);
       offset = numbytes_div_4 & -16;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 15;
     }
     else if(numbytes_div_4 < 64) // 128 bytes
     {
       memset_128bit_128B_a(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 5);
       offset = numbytes_div_4 & -32;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 31;
     }
     else // 256 bytes
     {
       memset_128bit_256B_a(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 6);
       offset = numbytes_div_4 & -64;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 63;
     }
 #endif
@@ -2800,7 +2800,7 @@ void * memset_large_4B_as(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_32bit(dest, val, numbytes_div_4);
       offset = numbytes_div_4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 = 0;
     }
 #ifdef __AVX512F__
@@ -2808,63 +2808,63 @@ void * memset_large_4B_as(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_128bit_as(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 2);
       offset = numbytes_div_4 & -4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 3;
     }
     else if(numbytes_div_4 < 16) // 32 bytes
     {
       memset_256bit_as(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 3);
       offset = numbytes_div_4 & -8;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 7;
     }
     else if(numbytes_div_4 < 32) // 64 bytes
     {
       memset_512bit_as(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 4);
       offset = numbytes_div_4 & -16;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 15;
     }
     else if(numbytes_div_4 < 64) // 128 bytes
     {
       memset_512bit_128B_as(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 5);
       offset = numbytes_div_4 & -32;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 31;
     }
     else if(numbytes_div_4 < 128) // 256 bytes
     {
       memset_512bit_256B_as(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 6);
       offset = numbytes_div_4 & -64;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 63;
     }
     else if(numbytes_div_4 < 256) // 512 bytes
     {
       memset_512bit_512B_as(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 7);
       offset = numbytes_div_4 & -128;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 127;
     }
     else if(numbytes_div_4 < 512) // 1024 bytes (1 kB)
     {
       memset_512bit_1kB_as(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 8);
       offset = numbytes_div_4 & -256;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 255;
     }
     else if(numbytes_div_4 < 1024) // 2048 bytes (2 kB)
     {
       memset_512bit_2kB_as(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 9);
       offset = numbytes_div_4 & -512;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 511;
     }
     else // 4096 bytes (4 kB)
     {
       memset_512bit_4kB_as(dest, _mm512_set1_epi32((int32_t)val), numbytes_div_4 >> 10);
       offset = numbytes_div_4 & -1024;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 1023;
     }
 #elif __AVX__
@@ -2872,42 +2872,42 @@ void * memset_large_4B_as(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_128bit_as(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 2);
       offset = numbytes_div_4 & -4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 3;
     }
     else if(numbytes_div_4 < 16) // 32 bytes
     {
       memset_256bit_as(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 3);
       offset = numbytes_div_4 & -8;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 7;
     }
     else if(numbytes_div_4 < 32) // 64 bytes
     {
       memset_256bit_64B_as(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 4);
       offset = numbytes_div_4 & -16;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 15;
     }
     else if(numbytes_div_4 < 64) // 128 bytes
     {
       memset_256bit_128B_as(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 5);
       offset = numbytes_div_4 & -32;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 31;
     }
     else if(numbytes_div_4 < 128) // 256 bytes
     {
       memset_256bit_256B_as(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 6);
       offset = numbytes_div_4 & -64;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 63;
     }
     else // 512 bytes
     {
       memset_256bit_512B_as(dest, _mm256_set1_epi32((int32_t)val), numbytes_div_4 >> 7);
       offset = numbytes_div_4 & -128;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 127;
     }
 #else // SSE2 only
@@ -2915,35 +2915,35 @@ void * memset_large_4B_as(void *dest, const uint32_t val, size_t numbytes_div_4)
     {
       memset_128bit_as(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 2);
       offset = numbytes_div_4 & -4;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 3;
     }
     else if(numbytes_div_4 < 16) // 32 bytes
     {
       memset_128bit_32B_as(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 3);
       offset = numbytes_div_4 & -8;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 7;
     }
     else if(numbytes_div_4 < 32) // 64 bytes
     {
       memset_128bit_64B_as(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 4);
       offset = numbytes_div_4 & -16;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 15;
     }
     else if(numbytes_div_4 < 64) // 128 bytes
     {
       memset_128bit_128B_as(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 5);
       offset = numbytes_div_4 & -32;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 31;
     }
     else // 256 bytes
     {
       memset_128bit_256B_as(dest, _mm_set1_epi32((int32_t)val), numbytes_div_4 >> 6);
       offset = numbytes_div_4 & -64;
-      dest = (char *)dest + offset;
+      dest = (uint32_t *)dest + offset;
       numbytes_div_4 &= 63;
     }
 #endif
@@ -3069,26 +3069,28 @@ void * AVX_memset_4B(void *dest, const uint32_t val, size_t numbytes_div_4)
   else
   {
     size_t numbytes_to_align = (BYTE_ALIGNMENT + 1) - ((uintptr_t)dest & BYTE_ALIGNMENT);
-    if(numbytes_to_align & 0x03) // Sanity check, return NULL if not alignable in 4B increments
+    if(numbytes_to_align & 0x03) // Sanity check, return pointer with address ~0ULL if not alignable in 4B increments
     {
-      return NULL;
+      return (void*)~0ULL; // This address guarantees a page fault on access, which helps to identify problems.
+      // Returning NULL risks returning a ponter to address 0x0, which in some case could be a valid address!
     }
     void * destoffset = (char*)dest + numbytes_to_align;
+    size_t numbytes_to_align_div_4 = numbytes_to_align >> 2;
 
-    if(numbytes_div_4 > (numbytes_to_align >> 2))
+    if(numbytes_div_4 > numbytes_to_align_div_4)
     {
       // Get to an aligned position.
       // This process only needs to be done once per call if dest is unaligned.
-      memset_large_4B(dest, val, numbytes_to_align >> 2);
+      memset_large_4B(dest, val, numbytes_to_align_div_4);
       // Now this should be near the fastest possible since stores are aligned.
       // ...and in memset there are only stores.
       if((numbytes_div_4 * 4 - numbytes_to_align) > CACHESIZELIMIT)
       {
-        memset_large_4B_as(destoffset, val, numbytes_div_4 - (numbytes_to_align >> 2));
+        memset_large_4B_as(destoffset, val, numbytes_div_4 - numbytes_to_align_div_4);
       }
       else
       {
-        memset_large_4B_a(destoffset, val, numbytes_div_4 - (numbytes_to_align >> 2));
+        memset_large_4B_a(destoffset, val, numbytes_div_4 - numbytes_to_align_div_4);
       }
     }
     else // Small size

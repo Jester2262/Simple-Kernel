@@ -2,7 +2,7 @@
 #
 # =================================
 #
-# RELEASE VERSION 1.04
+# RELEASE VERSION 1.1
 #
 # GCC/Clang Kernel64 Mac Compile Script
 #
@@ -82,8 +82,8 @@ done < $CurDir/h_files.txt
 
 #set -v
 #while read f; do
-#  echo "gcc" -ffreestanding -march=znver1 -mavx2 -m64 -fpie -fno-stack-protector -mno-red-zone $HFILES -Og -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
-#  "gcc" -ffreestanding -march=znver1 -mavx2 -m64 -fpie -fno-stack-protector -mno-red-zone $HFILES -Og -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
+#  echo "gcc" -ffreestanding -march=znver1 -mavx2 -Og -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector -m64 -mno-red-zone $HFILES -g3 -Wall -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
+#  "gcc" -ffreestanding -march=znver1 -mavx2 -Og -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector -m64 -mno-red-zone $HFILES -g3 -Wall -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
 #done < $CurDir/c_files_mac.txt
 #set +v
 
@@ -93,8 +93,8 @@ done < $CurDir/h_files.txt
 
 set -v
 for f in $CurDir/startup/*.c; do
-  echo "gcc" -ffreestanding -march=znver1 -mavx2 -m64 -fpie -fno-stack-protector -mno-red-zone $HFILES -O3 -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
-  "gcc" -ffreestanding -march=znver1 -mavx2 -m64 -fpie -fno-stack-protector -mno-red-zone $HFILES -O3 -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  echo "gcc" -ffreestanding -march=znver1 -mavx2 -O3 -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector -m64 -mno-red-zone $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  "gcc" -ffreestanding -march=znver1 -mavx2 -O3 -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector -m64 -mno-red-zone $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
 done
 set +v
 
@@ -112,8 +112,8 @@ set +v
 
 set -v
 for f in $CurDir/startup/*.S; do
-  echo "gcc" -ffreestanding -march=znver1 -mavx2 -m64 -fpie -fno-stack-protector -mno-red-zone $HFILES -Og -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
-  "gcc" -ffreestanding -march=znver1 -mavx2 -m64 -fpie -fno-stack-protector -mno-red-zone $HFILES -Og -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
+  echo "gcc" -ffreestanding -march=znver1 -mavx2 -Og -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector -m64 -mno-red-zone $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
+  "gcc" -ffreestanding -march=znver1 -mavx2 -Og -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector -m64 -mno-red-zone $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
 done
 set +v
 
@@ -123,8 +123,8 @@ set +v
 
 set -v
 for f in $CurDir/src/*.c; do
-  echo "gcc" -ffreestanding -march=znver1 -mavx2 -m64 -fpie -fno-stack-protector -mno-red-zone $HFILES -Og -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
-  "gcc" -ffreestanding -march=znver1 -mavx2 -m64 -fpie -fno-stack-protector -mno-red-zone $HFILES -Og -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  echo "gcc" -ffreestanding -march=znver1 -mavx2 -Og -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector -m64 -mno-red-zone $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  "gcc" -ffreestanding -march=znver1 -mavx2 -Og -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector -m64 -mno-red-zone $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
 done
 set +v
 
@@ -156,7 +156,7 @@ done
 #
 # Link the object files using all the objects in objects.list and an optional
 # linker script (it would go in the Backend/Linker directory) to generate the
-# output binary, which is called "Kernel64.mach64"
+# output binary, which is called "Kernel64-Ryzen.mach64"
 #
 # NOTE: Linkerscripts may be needed for bigger projects
 #
@@ -164,11 +164,11 @@ done
 # Preload's been obsoleted. Now we just get regular executables.
 # Also Pagezero protections don't work without virtual memory!!
 
-# "gcc" -nostdlib -T$LinkerScript -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-static -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64.mach64" @"objects.list" # LC_UNIXTHREAD, used by Mac's own kernel
+# "gcc" -nostdlib -T$LinkerScript -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-static -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64-Ryzen.mach64" @"objects.list" # LC_UNIXTHREAD, used by Mac's own kernel
 set -v
-"gcc" -nostdlib -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-static -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64.mach64" @"objects.list" # LC_UNIXTHREAD, used by Mac's own kernel
-#"gcc" -nostdlib -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64.mach64" @"objects.list" -lSystem # LC_MAIN, requires DYLD
-"strip" "Kernel64.mach64"
+"gcc" -nostdlib -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-static -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64-Ryzen.mach64" @"objects.list" # LC_UNIXTHREAD, used by Mac's own kernel
+#"gcc" -nostdlib -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64-Ryzen.mach64" @"objects.list" -lSystem # LC_MAIN, requires DYLD
+"strip" "Kernel64-Ryzen.mach64"
 set +v
 # Comment the above strip command to keep debug symbols in the output binary.
 
@@ -179,7 +179,7 @@ set +v
 echo
 echo Generating binary and Printing size information:
 echo
-"size" "Kernel64.mach64"
+"size" "Kernel64-Ryzen.mach64"
 echo
 
 #

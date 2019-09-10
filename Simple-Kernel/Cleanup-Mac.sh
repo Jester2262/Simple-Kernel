@@ -2,7 +2,7 @@
 #
 # =================================
 #
-# RELEASE VERSION 1.1
+# RELEASE VERSION 1.11
 #
 # GCC/Clang Kernel64 Mac Cleanup Script
 #
@@ -35,6 +35,7 @@ cd ../Backend
 
 rm Kernel64.mach64
 rm Kernel64-Sandybridge.mach64
+rm Kernel64-Ryzen.mach64
 rm output.map
 rm objects.list
 

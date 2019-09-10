@@ -420,6 +420,8 @@ typedef struct {
 
 // END UEFI and Bootloader functions, definitions, and declarations
 
+__attribute__((naked)) void kernel_main(LOADER_PARAMS * LP);
+
 //==================================================================================================================================
 // Anything below this comment (except the #endif at the very bottom) is safe to  remove without breaking compatibility with the
 // Simple UEFI Bootloader. Useful if you wanted to make your own kernel from total scratch.
@@ -624,10 +626,6 @@ typedef struct __attribute__((packed)) {
 extern GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info;
 extern GLOBAL_PRINT_INFO_STRUCT Global_Print_Info;
 
-// Because kernel_main() is a naked function and can't have local variables that would require stack space...
-extern unsigned char swapped_image[];
-extern unsigned char swapped_image2[];
-
 //----------------------------------------------------------------------------------------------------------------------------------
 //  Function Prototypes
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -787,8 +785,8 @@ void Resetdefaultscreen(void);
 
 void single_pixel(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x, UINT32 y, UINT32 color);
 
-void bitmap_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
-void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
+void bitmap_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
+void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
 
 void bitmap_bitswap(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output);
 void bitmap_bitreverse(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output);
@@ -797,13 +795,19 @@ void bitmap_bytemirror(const unsigned char * bitmap, UINT32 height, UINT32 width
 // Text-related functions (Display.c)
 void Initialize_Global_Printf_Defaults(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU);
 
-void single_char(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color);
-void single_char_anywhere(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y);
-void single_char_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
+void single_char(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color);
+void single_char_anywhere(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y);
+void single_char_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
 
-void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * string, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
-void formatted_string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, const char * string, ...);
-void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
+void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * string, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
+void formatted_string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, const char * string, ...);
+void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
+
+void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_final, UINT32 y_final, UINT32 color);
+void Draw_vector_polar(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 theta, UINT32 color);
+void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 r_diff, INT32 r_step, INT32 theta_init, INT32 theta_diff, UINT32 color);
+void Draw_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 x_length, INT32 y_length, UINT32 color);
+void Draw_filled_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_length, UINT32 y_length, UINT32 color);
 
 // Printf-related functions (Print.c)
 int snprintf(char *str, size_t size, const char *format, ...);
@@ -819,7 +823,7 @@ int kvprintf(char const *fmt, void (*func)(int, void*), void *arg, int radix, va
 int color_printf(uint32_t fontcolor, uint32_t highlightcolor, const char *fmt, ...);
 int error_printf(const char *fmt, ...);
 int warning_printf(const char *fmt, ...);
-
+int info_printf(const char *fmt, ...);
 
 void print_utf16_as_utf8(CHAR16 * strung, UINT64 size);
 char * UCS2_to_UTF8(CHAR16 * strang, UINT64 size);

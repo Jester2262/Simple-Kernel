@@ -40,7 +40,7 @@ void * memmove (void *dest, const void *src, size_t len)
 //  AVX Memory Functions: AVX Memmove
 //==============================================================================
 //
-// Version 1.4
+// Version 1.45
 //
 // Author:
 //  KNNSpeed
@@ -4027,13 +4027,14 @@ void * AVX_memmove(void *dest, void *src, size_t numbytes)
   }
   else // Unaligned
   {
-    size_t numbytes_to_align = (BYTE_ALIGNMENT + 1) - ((uintptr_t)dest & BYTE_ALIGNMENT);
-
-    void * destoffset = (char*)dest + numbytes_to_align;
-    void * srcoffset = (char*)src + numbytes_to_align;
+    size_t reverse_alignment = ((uintptr_t)dest & BYTE_ALIGNMENT);
+    size_t numbytes_to_align = (BYTE_ALIGNMENT + 1) - reverse_alignment;
 
     if((char *)dest < (char *)src)
     {
+      void * destoffset = (char*)dest + numbytes_to_align;
+      void * srcoffset = (char*)src + numbytes_to_align;
+
       if(numbytes > numbytes_to_align)
       {
         // Get to an aligned position.
@@ -4056,12 +4057,17 @@ void * AVX_memmove(void *dest, void *src, size_t numbytes)
     }
     else // src < dest
     {
-      if(numbytes > numbytes_to_align)
+      if(numbytes > reverse_alignment)
       {
-        // Move bulk, up to lowest alignment line
-        memmove_large_reverse(destoffset, srcoffset, numbytes - numbytes_to_align);
+        size_t better_aligned_bytes = numbytes - reverse_alignment;
+
+        void * destoffset = (char*)dest + better_aligned_bytes;
+        void * srcoffset = (char*)src + better_aligned_bytes;
+
         // Move remainder
-        memmove_large_reverse(dest, src, numbytes_to_align);
+        memmove_large_reverse(destoffset, srcoffset, reverse_alignment);
+        // Move bulk, up to lowest alignment line
+        memmove_large_reverse(dest, src, better_aligned_bytes);
       }
       else // Small size
       {

@@ -58,7 +58,7 @@
 // In order to couple an allocated region to a hardware page, see set_region_hwpages().
 //
 
-__attribute__((malloc)) void * malloc(size_t numbytes)
+void * malloc(size_t numbytes)
 {
   if(numbytes < (2ULL << 20)) // < 2MB
   {
@@ -89,7 +89,7 @@ __attribute__((malloc)) void * malloc(size_t numbytes)
 // Each of these allocate bytes at physical addresses aligned on X-byte boundaries (X in mallocX). Otherwise, same rules as above.
 //
 
-__attribute__((malloc)) void * malloc4KB(size_t numbytes)
+void * malloc4KB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -98,7 +98,7 @@ __attribute__((malloc)) void * malloc4KB(size_t numbytes)
   return (void*)new_buffer;
 }
 
-__attribute__((malloc)) void * malloc2MB(size_t numbytes)
+void * malloc2MB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -107,7 +107,7 @@ __attribute__((malloc)) void * malloc2MB(size_t numbytes)
   return (void*)new_buffer;
 }
 
-__attribute__((malloc)) void * malloc1GB(size_t numbytes)
+void * malloc1GB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -116,7 +116,7 @@ __attribute__((malloc)) void * malloc1GB(size_t numbytes)
   return (void*)new_buffer;
 }
 
-__attribute__((malloc)) void * malloc512GB(size_t numbytes)
+void * malloc512GB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -125,7 +125,7 @@ __attribute__((malloc)) void * malloc512GB(size_t numbytes)
   return (void*)new_buffer;
 }
 
-__attribute__((malloc)) void * malloc256TB(size_t numbytes)
+void * malloc256TB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -262,7 +262,7 @@ void * realloc(void * allocated_address, size_t size)
           // There is no else, as there are only > and == cases.
           else
           {
-            printf("realloc: What kind of sorcery is this? Seeing this means there's a bug in realloc.\r\n");
+            error_printf("realloc: What kind of sorcery is this? Seeing this means there's a bug in realloc.\r\n");
             // And also probably MemMap_Prep()...
             HaCF();
           }
@@ -273,7 +273,7 @@ void * realloc(void * allocated_address, size_t size)
           void * new_address = malloc(size);
           if((EFI_PHYSICAL_ADDRESS)new_address == ~0ULL)
           {
-            printf("realloc: Insufficient free memory, could not reallocate increased size.\r\n");
+            error_printf("realloc: Insufficient free memory, could not reallocate increased size.\r\n");
             return new_address; // Better to return this invalid address than to return allocated_address
           }
           //
@@ -435,7 +435,7 @@ void * realloc(void * allocated_address, size_t size)
 #ifdef MEMORY_CHECK_INFO
   if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
   {
-    printf("realloc: Piece not found.\r\n");
+    error_printf("realloc: Piece not found.\r\n");
     return (void*) ~3ULL;
   }
 #endif
@@ -480,7 +480,7 @@ void free(void * allocated_address)
 #ifdef MEMORY_CHECK_INFO
   if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
   {
-    printf("free: Piece not found.\r\n");
+    error_printf("free: Piece not found.\r\n");
   }
 #endif
 }
@@ -528,7 +528,7 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
 
   if(page_base_address & 0xFFF) // There are no page base addresses < 4kB-aligned
   {
-    printf("Hey! That's not a 4kB-aligned hardware page base address!\r\nget_page() failed.\r\n");
+    error_printf("Hey! That's not a 4kB-aligned hardware page base address!\r\nget_page() failed.\r\n");
     return page_data;
   }
   else
@@ -565,7 +565,7 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
             uint64_t pml_base_address = page_data.PageTableEntryData & PML5_ADDRESS_MASK;
             if(page_base_address != pml_base_address)
             {
-              printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+              warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
               return page_data; // return get_page(pml_base_address);
             }
 
@@ -590,7 +590,7 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
               uint64_t pml_base_address = page_data.PageTableEntryData & PML4_ADDRESS_MASK;
               if(page_base_address != pml_base_address)
               {
-                printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                 return page_data;
               }
 
@@ -615,7 +615,7 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
                 uint64_t pml_base_address = page_data.PageTableEntryData & PML3_ADDRESS_MASK;
                 if(page_base_address != pml_base_address)
                 {
-                  printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                  warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                   return page_data;
                 }
 
@@ -640,7 +640,7 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
                   uint64_t pml_base_address = page_data.PageTableEntryData & PML2_ADDRESS_MASK;
                   if(page_base_address != pml_base_address)
                   {
-                    printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                    warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                     return page_data;
                   }
 
@@ -692,7 +692,7 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
             uint64_t pml_base_address = page_data.PageTableEntryData & PML3_ADDRESS_MASK;
             if(page_base_address != pml_base_address)
             {
-              printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+              warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
               return page_data;
             }
 
@@ -717,7 +717,7 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
               uint64_t pml_base_address = page_data.PageTableEntryData & PML2_ADDRESS_MASK;
               if(page_base_address != pml_base_address)
               {
-                printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                 return page_data;
               }
 
@@ -759,7 +759,7 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
     // Loop ended without a discovered address
     if(Piece >= (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
     {
-      printf("get_page: Could not find page base address. It may not be aligned or allocated.\r\n");
+      error_printf("get_page: Could not find page base address. It may not be aligned or allocated.\r\n");
       return page_data;
     }
   }
@@ -800,7 +800,7 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
 
   if(page_base_address & 0xFFF) // There are no page base addresses < 4kB-aligned
   {
-    printf("Hey! That's not a 4kB-aligned hardware page base address!\r\nset_region_hwpages() failed.\r\n");
+    error_printf("Hey! That's not a 4kB-aligned hardware page base address!\r\nset_region_hwpages() failed.\r\n");
     return 3;
   }
   else
@@ -839,7 +839,7 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
                 uint64_t pml_base_address = ((uint64_t*)base_pml_addr)[pml5_part] & PML5_ADDRESS_MASK;
                 if(page_base_address != pml_base_address)
                 {
-                  printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                  warning_printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                   return 3;
                 }
 
@@ -848,12 +848,12 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
 
               if(regionpages < (1ULL << 36))
               {
-                printf("Error: Region at base address %#qx does not cover entire 256TB page. (5-lvl)\r\n", page_base_address);
-                printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
-                printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
-                printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                printf("that consumes all hardware pages encompassed by the region.\r\n");
-                printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                warning_printf("Error: Region at base address %#qx does not cover entire 256TB page. (5-lvl)\r\n", page_base_address);
+                warning_printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
+                warning_printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
+                warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                 return 2;
               }
 
@@ -887,7 +887,7 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
                   uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml4_part] & PML4_ADDRESS_MASK;
                   if(page_base_address != pml_base_address)
                   {
-                    printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                    warning_printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                     return 3;
                   }
 
@@ -896,12 +896,12 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
 
                 if(regionpages < (1ULL << 27))
                 {
-                  printf("Error: Region at base address %#qx does not cover entire 512GB page. (5-lvl)\r\n", page_base_address);
-                  printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
-                  printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
-                  printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                  printf("that consumes all hardware pages encompassed by the region.\r\n");
-                  printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                  warning_printf("Error: Region at base address %#qx does not cover entire 512GB page. (5-lvl)\r\n", page_base_address);
+                  warning_printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
+                  warning_printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
+                  warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                  warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                  warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                   return 2;
                 }
 
@@ -935,7 +935,7 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
                     uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml3_part] & PML3_ADDRESS_MASK;
                     if(page_base_address != pml_base_address)
                     {
-                      printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                      warning_printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                       return 3;
                     }
 
@@ -944,12 +944,12 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
 
                   if(regionpages < (1ULL << 18))
                   {
-                    printf("Error: Region at base address %#qx does not cover entire 1GB page. (5-lvl)\r\n", page_base_address);
-                    printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
-                    printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
-                    printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                    printf("that consumes all hardware pages encompassed by the region.\r\n");
-                    printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                    warning_printf("Error: Region at base address %#qx does not cover entire 1GB page. (5-lvl)\r\n", page_base_address);
+                    warning_printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
+                    warning_printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
+                    warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                    warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                    warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                     return 2;
                   }
 
@@ -983,7 +983,7 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
                       uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml2_part] & PML2_ADDRESS_MASK;
                       if(page_base_address != pml_base_address)
                       {
-                        printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                        warning_printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                         return 3;
                       }
 
@@ -992,12 +992,12 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
 
                     if(regionpages < (1ULL << 9))
                     {
-                      printf("Error: Region at base address %#qx does not cover entire 2MB page. (5-lvl)\r\n", page_base_address);
-                      printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
-                      printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
-                      printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                      printf("that consumes all hardware pages encompassed by the region.\r\n");
-                      printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                      warning_printf("Error: Region at base address %#qx does not cover entire 2MB page. (5-lvl)\r\n", page_base_address);
+                      warning_printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
+                      warning_printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
+                      warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                      warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                      warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                       return 2;
                     }
 
@@ -1069,7 +1069,7 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
                 uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml3_part] & PML3_ADDRESS_MASK;
                 if(page_base_address != pml_base_address)
                 {
-                  printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                  warning_printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                   return 3;
                 }
 
@@ -1078,12 +1078,12 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
 
               if(regionpages < (1ULL << 18))
               {
-                printf("Error: Region at base address %#qx does not cover entire 1GB page. (4-lvl)\r\n", page_base_address);
-                printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
-                printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
-                printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                printf("that consumes all hardware pages encompassed by the region.\r\n");
-                printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                warning_printf("Error: Region at base address %#qx does not cover entire 1GB page. (4-lvl)\r\n", page_base_address);
+                warning_printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
+                warning_printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
+                warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                 return 2;
               }
 
@@ -1117,7 +1117,7 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
                   uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml2_part] & PML2_ADDRESS_MASK;
                   if(page_base_address != pml_base_address)
                   {
-                    printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                    warning_printf("set_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                     return 3;
                   }
 
@@ -1126,12 +1126,12 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
 
                 if(regionpages < (1ULL << 9))
                 {
-                  printf("Error: Region at base address %#qx does not cover entire 2MB page. (4-lvl)\r\n", page_base_address);
-                  printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
-                  printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
-                  printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                  printf("that consumes all hardware pages encompassed by the region.\r\n");
-                  printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                  warning_printf("Error: Region at base address %#qx does not cover entire 2MB page. (4-lvl)\r\n", page_base_address);
+                  warning_printf("Beware that some hardware pages of this region passed to set_region_hwpages() may have\r\n");
+                  warning_printf("already been set. Recommendation is to immediately run set_region_hwpages() again on the\r\n");
+                  warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                  warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                  warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                   return 2;
                 }
 
@@ -1188,7 +1188,7 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
     // Loop ended without a discovered address
     if(Piece >= (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
     {
-      printf("set_region_hwpages: Could not find page base address. It may not be aligned or allocated.\r\n");
+      error_printf("set_region_hwpages: Could not find page base address. It may not be aligned or allocated.\r\n");
       return 1;
     }
   }
@@ -1206,7 +1206,7 @@ uint8_t set_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint6
 // physical ones.
 //
 
-__attribute__((malloc)) void * vmalloc(size_t numbytes)
+void * vmalloc(size_t numbytes)
 {
   if(numbytes < (2ULL << 20)) // < 2MB
   {
@@ -1237,7 +1237,7 @@ __attribute__((malloc)) void * vmalloc(size_t numbytes)
 // Each of these allocate bytes at virtual addresses aligned on X-byte boundaries (X in vmallocX). Otherwise, same rules as above.
 //
 
-__attribute__((malloc)) void * vmalloc4KB(size_t numbytes)
+void * vmalloc4KB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -1246,7 +1246,7 @@ __attribute__((malloc)) void * vmalloc4KB(size_t numbytes)
   return (void*)new_buffer;
 }
 
-__attribute__((malloc)) void * vmalloc2MB(size_t numbytes)
+void * vmalloc2MB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -1255,7 +1255,7 @@ __attribute__((malloc)) void * vmalloc2MB(size_t numbytes)
   return (void*)new_buffer;
 }
 
-__attribute__((malloc)) void * vmalloc1GB(size_t numbytes)
+void * vmalloc1GB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -1264,7 +1264,7 @@ __attribute__((malloc)) void * vmalloc1GB(size_t numbytes)
   return (void*)new_buffer;
 }
 
-__attribute__((malloc)) void * vmalloc512GB(size_t numbytes)
+void * vmalloc512GB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -1273,7 +1273,7 @@ __attribute__((malloc)) void * vmalloc512GB(size_t numbytes)
   return (void*)new_buffer;
 }
 
-__attribute__((malloc)) void * vmalloc256TB(size_t numbytes)
+void * vmalloc256TB(size_t numbytes)
 {
   EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
 
@@ -1410,7 +1410,7 @@ void * vrealloc(void * allocated_address, size_t size)
           // There is no else, as there are only > and == cases.
           else
           {
-            printf("vrealloc: What kind of sorcery is this? Seeing this means there's a bug in vrealloc.\r\n");
+            error_printf("vrealloc: What kind of sorcery is this? Seeing this means there's a bug in vrealloc.\r\n");
             // And also probably MemMap_Prep()...
             HaCF();
           }
@@ -1421,7 +1421,7 @@ void * vrealloc(void * allocated_address, size_t size)
           void * new_address = vmalloc(size);
           if((EFI_VIRTUAL_ADDRESS)new_address == ~0ULL)
           {
-            printf("vrealloc: Insufficient free memory, could not reallocate increased size.\r\n");
+            error_printf("vrealloc: Insufficient free memory, could not reallocate increased size.\r\n");
             return new_address; // Better to return this invalid address than to return allocated_address
           }
           //
@@ -1583,7 +1583,7 @@ void * vrealloc(void * allocated_address, size_t size)
 #ifdef MEMORY_CHECK_INFO
   if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
   {
-    printf("vrealloc: Piece not found.\r\n");
+    error_printf("vrealloc: Piece not found.\r\n");
     return (void*) ~3ULL;
   }
 #endif
@@ -1628,7 +1628,7 @@ void vfree(void * allocated_address)
 #ifdef MEMORY_CHECK_INFO
   if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
   {
-    printf("vfree: Piece not found.\r\n");
+    error_printf("vfree: Piece not found.\r\n");
   }
 #endif
 }
@@ -1699,7 +1699,7 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
 
       if(page_base_address & 0xFFF) // There are no page base addresses < 4kB-aligned
       {
-        printf("Hey! That's not a 4kB-aligned hardware page base address!\r\nvget_page() failed.\r\n");
+        error_printf("Hey! That's not a 4kB-aligned hardware page base address!\r\nvget_page() failed.\r\n");
         return page_data;
       }
 
@@ -1724,7 +1724,7 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
           uint64_t pml_base_address = page_data.PageTableEntryData & PML5_ADDRESS_MASK;
           if(page_base_address != pml_base_address)
           {
-            printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+            warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
             return page_data;
           }
 
@@ -1749,7 +1749,7 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
             uint64_t pml_base_address = page_data.PageTableEntryData & PML4_ADDRESS_MASK;
             if(page_base_address != pml_base_address)
             {
-              printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+              warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
               return page_data;
             }
 
@@ -1774,7 +1774,7 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
               uint64_t pml_base_address = page_data.PageTableEntryData & PML3_ADDRESS_MASK;
               if(page_base_address != pml_base_address)
               {
-                printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                 return page_data;
               }
 
@@ -1799,7 +1799,7 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
                 uint64_t pml_base_address = page_data.PageTableEntryData & PML2_ADDRESS_MASK;
                 if(page_base_address != pml_base_address)
                 {
-                  printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                  warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                   return page_data;
                 }
 
@@ -1851,7 +1851,7 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
           uint64_t pml_base_address = page_data.PageTableEntryData & PML3_ADDRESS_MASK;
           if(page_base_address != pml_base_address)
           {
-            printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+            warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
             return page_data;
           }
 
@@ -1876,7 +1876,7 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
             uint64_t pml_base_address = page_data.PageTableEntryData & PML2_ADDRESS_MASK;
             if(page_base_address != pml_base_address)
             {
-              printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+              warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
               return page_data;
             }
 
@@ -1918,7 +1918,7 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
   // Loop ended without a discovered address
   if(Piece >= (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
   {
-    printf("vget_page: Could not find page base address. It may not be aligned or allocated.\r\n");
+    error_printf("vget_page: Could not find page base address. It may not be aligned or allocated.\r\n");
     return page_data;
   }
 
@@ -1969,7 +1969,7 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
 
       if(page_base_address & 0xFFF) // There are no physical page base addresses < 4kB-aligned
       {
-        printf("Hey! That's not a 4kB-aligned hardware page base address!\r\nvset_region_hwpages() failed.\r\n");
+        error_printf("Hey! That's not a 4kB-aligned hardware page base address!\r\nvset_region_hwpages() failed.\r\n");
         return 3;
       }
 
@@ -1998,7 +1998,7 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
               uint64_t pml_base_address = ((uint64_t*)base_pml_addr)[pml5_part] & PML5_ADDRESS_MASK;
               if(page_base_address != pml_base_address)
               {
-                printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                warning_printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                 return 3;
               }
 
@@ -2007,12 +2007,12 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
 
             if(regionpages < (1ULL << 36))
             {
-              printf("Error: Region at base address %#qx does not cover entire 256TB page. (5-lvl)\r\n", page_base_address);
-              printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
-              printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
-              printf("same area with its prior values, and then reallocate the region with a size\r\n");
-              printf("that consumes all hardware pages encompassed by the region.\r\n");
-              printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+              warning_printf("Error: Region at base address %#qx does not cover entire 256TB page. (5-lvl)\r\n", page_base_address);
+              warning_printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
+              warning_printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
+              warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+              warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+              warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
               return 2;
             }
 
@@ -2046,7 +2046,7 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
                 uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml4_part] & PML4_ADDRESS_MASK;
                 if(page_base_address != pml_base_address)
                 {
-                  printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                  warning_printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                   return 3;
                 }
 
@@ -2055,12 +2055,12 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
 
               if(regionpages < (1ULL << 27))
               {
-                printf("Error: Region at base address %#qx does not cover entire 512GB page. (5-lvl)\r\n", page_base_address);
-                printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
-                printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
-                printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                printf("that consumes all hardware pages encompassed by the region.\r\n");
-                printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                warning_printf("Error: Region at base address %#qx does not cover entire 512GB page. (5-lvl)\r\n", page_base_address);
+                warning_printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
+                warning_printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
+                warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                 return 2;
               }
 
@@ -2094,7 +2094,7 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
                   uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml3_part] & PML3_ADDRESS_MASK;
                   if(page_base_address != pml_base_address)
                   {
-                    printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                    warning_printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                     return 3;
                   }
 
@@ -2103,12 +2103,12 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
 
                 if(regionpages < (1ULL << 18))
                 {
-                  printf("Error: Region at base address %#qx does not cover entire 1GB page. (5-lvl)\r\n", page_base_address);
-                  printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
-                  printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
-                  printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                  printf("that consumes all hardware pages encompassed by the region.\r\n");
-                  printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                  warning_printf("Error: Region at base address %#qx does not cover entire 1GB page. (5-lvl)\r\n", page_base_address);
+                  warning_printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
+                  warning_printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
+                  warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                  warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                  warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                   return 2;
                 }
 
@@ -2142,7 +2142,7 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
                     uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml2_part] & PML2_ADDRESS_MASK;
                     if(page_base_address != pml_base_address)
                     {
-                      printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                      warning_printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                       return 3;
                     }
 
@@ -2151,12 +2151,12 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
 
                   if(regionpages < (1ULL << 9))
                   {
-                    printf("Error: Region at base address %#qx does not cover entire 2MB page. (5-lvl)\r\n", page_base_address);
-                    printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
-                    printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
-                    printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                    printf("that consumes all hardware pages encompassed by the region.\r\n");
-                    printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                    warning_printf("Error: Region at base address %#qx does not cover entire 2MB page. (5-lvl)\r\n", page_base_address);
+                    warning_printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
+                    warning_printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
+                    warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                    warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                    warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                     return 2;
                   }
 
@@ -2228,7 +2228,7 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
               uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml3_part] & PML3_ADDRESS_MASK;
               if(page_base_address != pml_base_address)
               {
-                printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                warning_printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                 return 3;
               }
 
@@ -2237,12 +2237,12 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
 
             if(regionpages < (1ULL << 18))
             {
-              printf("Error: Region at base address %#qx does not cover entire 1GB page. (4-lvl)\r\n", page_base_address);
-              printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
-              printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
-              printf("same area with its prior values, and then reallocate the region with a size\r\n");
-              printf("that consumes all hardware pages encompassed by the region.\r\n");
-              printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+              warning_printf("Error: Region at base address %#qx does not cover entire 1GB page. (4-lvl)\r\n", page_base_address);
+              warning_printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
+              warning_printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
+              warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+              warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+              warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
               return 2;
             }
 
@@ -2276,7 +2276,7 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
                 uint64_t pml_base_address = ((uint64_t*)next_pml_addr)[pml2_part] & PML2_ADDRESS_MASK;
                 if(page_base_address != pml_base_address)
                 {
-                  printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
+                  warning_printf("vset_region_hwpages: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
                   return 3;
                 }
 
@@ -2285,12 +2285,12 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
 
               if(regionpages < (1ULL << 9))
               {
-                printf("Error: Region at base address %#qx does not cover entire 2MB page. (4-lvl)\r\n", page_base_address);
-                printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
-                printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
-                printf("same area with its prior values, and then reallocate the region with a size\r\n");
-                printf("that consumes all hardware pages encompassed by the region.\r\n");
-                printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
+                warning_printf("Error: Region at base address %#qx does not cover entire 2MB page. (4-lvl)\r\n", page_base_address);
+                warning_printf("Beware that some hardware pages of this region passed to vset_region_hwpages() may have\r\n");
+                warning_printf("already been set. Recommendation is to immediately run vset_region_hwpages() again on the\r\n");
+                warning_printf("same area with its prior values, and then reallocate the region with a size\r\n");
+                warning_printf("that consumes all hardware pages encompassed by the region.\r\n");
+                warning_printf("NOTE: Memory map attributes for the region have also not been updated.\r\n");
                 return 2;
               }
 
@@ -2347,7 +2347,7 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
   // Loop ended without a discovered address
   if(Piece >= (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
   {
-    printf("vset_region_hwpages: Could not find page base address. It may not be aligned or allocated.\r\n");
+    error_printf("vset_region_hwpages: Could not find page base address. It may not be aligned or allocated.\r\n");
     return 1;
   }
 
@@ -2363,9 +2363,9 @@ uint8_t vset_region_hwpages(void * hw_page_base_addr, uint64_t entry_flags, uint
 
 uint8_t VerifyZeroMem(size_t NumBytes, uint64_t BaseAddr) // BaseAddr is a 64-bit unsigned int whose value is the memory address
 {
-  for(size_t i = 0; i < NumBytes; i++)
+  for(size_t verify_increment = 0; verify_increment < NumBytes; verify_increment++)
   {
-    if(*(uint8_t*)(BaseAddr + i) != 0)
+    if(*(uint8_t*)(BaseAddr + verify_increment) != 0)
     {
       return 1;
     }
@@ -2500,14 +2500,14 @@ uint64_t GetInstalledSystemRam(EFI_CONFIGURATION_TABLE * ConfigurationTables, UI
   uint64_t systemram = 0;
   uint8_t smbiostablefound = 0;
 
-  for(uint64_t i=0; i < NumConfigTables; i++)
+  for(uint64_t configtable_iter = 0; configtable_iter < NumConfigTables; configtable_iter++)
   {
-    if(!(AVX_memcmp(&ConfigurationTables[i].VendorGuid, &Smbios3TableGuid, 16, 0)))
+    if(!(AVX_memcmp(&ConfigurationTables[configtable_iter].VendorGuid, &Smbios3TableGuid, 16, 0)))
     {
       printf("SMBIOS 3.x table found!\r\n");
       smbiostablefound = 3;
 
-       SMBIOS_TABLE_3_0_ENTRY_POINT * smb3_entry = (SMBIOS_TABLE_3_0_ENTRY_POINT*)ConfigurationTables[i].VendorTable;
+       SMBIOS_TABLE_3_0_ENTRY_POINT * smb3_entry = (SMBIOS_TABLE_3_0_ENTRY_POINT*)ConfigurationTables[configtable_iter].VendorTable;
        SMBIOS_STRUCTURE * smb_header = (SMBIOS_STRUCTURE*)smb3_entry->TableAddress;
        uint8_t* smb3_end = (uint8_t *)(smb3_entry->TableAddress + (uint64_t)smb3_entry->TableMaximumSize);
 
@@ -2549,14 +2549,14 @@ uint64_t GetInstalledSystemRam(EFI_CONFIGURATION_TABLE * ConfigurationTables, UI
 
   if(smbiostablefound != 3)
   {
-    for(uint64_t i=0; i < NumConfigTables; i++)
+    for(uint64_t configtable_iter = 0; configtable_iter < NumConfigTables; configtable_iter++)
     {
-      if(!(AVX_memcmp(&ConfigurationTables[i].VendorGuid, &SmbiosTableGuid, 16, 0)))
+      if(!(AVX_memcmp(&ConfigurationTables[configtable_iter].VendorGuid, &SmbiosTableGuid, 16, 0)))
       {
         printf("SMBIOS table found!\r\n");
         smbiostablefound = 1;
 
-        SMBIOS_TABLE_ENTRY_POINT * smb_entry = (SMBIOS_TABLE_ENTRY_POINT*)ConfigurationTables[i].VendorTable;
+        SMBIOS_TABLE_ENTRY_POINT * smb_entry = (SMBIOS_TABLE_ENTRY_POINT*)ConfigurationTables[configtable_iter].VendorTable;
         SMBIOS_STRUCTURE * smb_header = (SMBIOS_STRUCTURE*)((uint64_t)smb_entry->TableAddress);
         uint8_t* smb_end = (uint8_t *)((uint64_t)smb_entry->TableAddress + (uint64_t)smb_entry->TableLength);
 
@@ -2599,7 +2599,7 @@ uint64_t GetInstalledSystemRam(EFI_CONFIGURATION_TABLE * ConfigurationTables, UI
 
   if(systemram < GetVisibleSystemRam())
   {
-    printf("No SMBIOS tables or incorrect SMBIOS data found. Approximating RAM...\r\n");
+    info_printf("No SMBIOS tables or incorrect SMBIOS data found. Approximating RAM...\r\n");
     systemram = GuessInstalledSystemRam();
   }
 
@@ -2703,8 +2703,10 @@ void print_system_memmap(void)
 // Get the system memory map, parse it, identity map it, and set the virtual address map accordingly.
 // Identity mapping means Physical Address == Virtual Address, also called a 1:1 (one-to-one) map
 //
+// Returns ~0ULL as a pointer if a failure is encountered.
+//
 
-EFI_MEMORY_DESCRIPTOR * Set_Identity_VMAP(EFI_RUNTIME_SERVICES * RTServices)
+__attribute__((target("no-sse"))) EFI_MEMORY_DESCRIPTOR * Set_Identity_VMAP(EFI_RUNTIME_SERVICES * RTServices)
 {
   EFI_MEMORY_DESCRIPTOR * Piece;
 
@@ -2715,8 +2717,9 @@ EFI_MEMORY_DESCRIPTOR * Set_Identity_VMAP(EFI_RUNTIME_SERVICES * RTServices)
 
   if(EFI_ERROR(RTServices->SetVirtualAddressMap(Global_Memory_Info.MemMapSize, Global_Memory_Info.MemMapDescriptorSize, Global_Memory_Info.MemMapDescriptorVersion, Global_Memory_Info.MemMap)))
   {
-//    printf("Error setting VMAP. Returning NULL.\r\n");
-    return NULL;
+    // This function gets called too early for print
+    // warning_printf("Error setting VMAP. Returning NULL.\r\n");
+    return (EFI_MEMORY_DESCRIPTOR*)~0ULL;
   }
 
   return Global_Memory_Info.MemMap;
@@ -2739,7 +2742,7 @@ void Setup_MemMap(void)
   EFI_PHYSICAL_ADDRESS new_MemMap_base_address = ActuallyFreeAddress(numpages, 0); // This will only give addresses at the base of a chunk of EfiConventionalMemory
   if(new_MemMap_base_address == ~0ULL)
   {
-    printf("Setup_MemMap: Can't move MemMap for enlargement: Out of memory, memory subsystem not usable.\r\n");
+    error_printf("Setup_MemMap: Can't move MemMap for enlargement: Out of memory, memory subsystem not usable.\r\n");
     HaCF();
   }
   else
@@ -2785,7 +2788,7 @@ void Setup_MemMap(void)
 
     if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
     {
-      printf("Setup_MemMap: MemMap not found.\r\n");
+      error_printf("Setup_MemMap: MemMap not found.\r\n");
       HaCF();
     }
     else
@@ -2877,7 +2880,7 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
 
     if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
     {
-      printf("MemMap_Prep: MemMap not found. Has it not been set up yet?\r\n");
+      error_printf("MemMap_Prep: MemMap not found. Has it not been set up yet?\r\n");
       HaCF();
     }
     else // Found memmap, so no issues
@@ -2950,7 +2953,7 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
         // There is no else, as there are only > and == cases.
         else
         {
-          printf("MemMap_Prep: What kind of sorcery is this? Seeing this means there's a bug in MemMap_Prep.\r\n");
+          error_printf("MemMap_Prep: What kind of sorcery is this? Seeing this means there's a bug in MemMap_Prep.\r\n");
           HaCF();
         }
       } // End convenient conditions
@@ -2964,7 +2967,7 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
         EFI_PHYSICAL_ADDRESS new_MemMap_base_address = ActuallyFreeAddress(numpages, 0); // This will only give addresses at the base of a chunk of EfiConventionalMemory
         if(new_MemMap_base_address == ~0ULL)
         {
-          printf("MemMap_Prep: Can't move memmap for enlargement: Out of memory\r\n");
+          error_printf("MemMap_Prep: Can't move memmap for enlargement: Out of memory\r\n");
           return ~0ULL;
         }
         else
@@ -3016,7 +3019,7 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
           if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
           {
             // If this ever happens, it's an emergency situation and everything needs to stop now since the map is gone.
-            printf("MemMap_Prep: MemMap not found. Something's weird here...\r\n");
+            error_printf("MemMap_Prep: MemMap not found. Something's weird here...\r\n");
             HaCF();
           }
           else
@@ -3092,7 +3095,7 @@ EFI_PHYSICAL_ADDRESS pagetable_alloc(uint64_t pagetables_size)
   // First, ensure memmap has enough space for another descriptor
   if(MemMap_Prep(1))
   {
-    printf("pagetable_alloc: Could not prep memory map...\r\n");
+    error_printf("pagetable_alloc: Could not prep memory map...\r\n");
     HaCF();
   }
 
@@ -3102,7 +3105,7 @@ EFI_PHYSICAL_ADDRESS pagetable_alloc(uint64_t pagetables_size)
   EFI_PHYSICAL_ADDRESS pagetable_address = ActuallyFreeAddress(numpages, 0); // This will only give addresses at the base of a chunk of EfiConventionalMemory
   if(pagetable_address == ~0ULL)
   {
-    printf("Not enough space for page tables. Unsafe to continue.\r\n");
+    error_printf("Not enough space for page tables. Unsafe to continue.\r\n");
     HaCF();
   }
   else
@@ -3121,7 +3124,7 @@ EFI_PHYSICAL_ADDRESS pagetable_alloc(uint64_t pagetables_size)
 
     if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
     {
-      printf("Pagetable area not found. Unsafe to continue.\r\n");
+      error_printf("Pagetable area not found. Unsafe to continue.\r\n");
       HaCF();
     }
     else
@@ -3201,7 +3204,7 @@ EFI_PHYSICAL_ADDRESS ActuallyFreeAddress(size_t pages, EFI_PHYSICAL_ADDRESS OldA
   {
     // Return address -1
 #ifdef MEMORY_CHECK_INFO
-    printf("No more free physical addresses...\r\n");
+    error_printf("No more free physical addresses...\r\n");
 #endif
     return ~0ULL;
   }
@@ -3254,7 +3257,7 @@ EFI_PHYSICAL_ADDRESS ActuallyFreeAddressByPage(size_t pages, EFI_PHYSICAL_ADDRES
   if(DiscoveredAddress == ~0ULL)
   {
     // Return address -1
-    printf("No more free physical addresses by %llu-byte page...\r\n", EFI_PAGE_SIZE);
+    error_printf("No more free physical addresses by %llu-byte page...\r\n", EFI_PAGE_SIZE);
   }
 #endif
 
@@ -3281,7 +3284,7 @@ EFI_PHYSICAL_ADDRESS ActuallyAlignedFreeAddress(size_t pages, EFI_PHYSICAL_ADDRE
 
   if( (byte_alignment & EFI_PAGE_MASK) || (byte_alignment < EFI_PAGE_SIZE) ) // Needs to be a multiple of the memmap page size (4kB)
   {
-    printf("ActuallyAlignedFreeAddress: Invalid byte alignment value.\r\nMultiple of EFI_PAGE_SIZE (4kB per UEFI 2.x spec) required.\r\n");
+    error_printf("ActuallyAlignedFreeAddress: Invalid byte alignment value.\r\nMultiple of EFI_PAGE_SIZE (4kB per UEFI 2.x spec) required.\r\n");
     return ~1ULL;
 //    byte_alignment &= ~EFI_PAGE_MASK; // Force it to the nearest multiple of 4kB, rounding down such that, e.g., 6kb -> 4kB, 11kB -> 8kB, etc.
   }
@@ -3341,7 +3344,7 @@ EFI_PHYSICAL_ADDRESS ActuallyAlignedFreeAddress(size_t pages, EFI_PHYSICAL_ADDRE
   if(DiscoveredAddress == ~0ULL)
   {
     // Return address -1
-    printf("No more free physical addresses aligned by %llu bytes...\r\n", byte_alignment);
+    error_printf("No more free physical addresses aligned by %llu bytes...\r\n", byte_alignment);
   }
 #endif
 
@@ -3378,7 +3381,7 @@ EFI_PHYSICAL_ADDRESS AllocateFreeAddress(size_t numbytes, EFI_PHYSICAL_ADDRESS O
   uint64_t memmap_check = MemMap_Prep(2);
   if(memmap_check)
   {
-    printf("AllocateFreeAddress (malloc): Could not prep memory map...\r\n");
+    error_printf("AllocateFreeAddress (malloc): Could not prep memory map...\r\n");
     return memmap_check;
   }
 
@@ -3396,12 +3399,12 @@ EFI_PHYSICAL_ADDRESS AllocateFreeAddress(size_t numbytes, EFI_PHYSICAL_ADDRESS O
   EFI_PHYSICAL_ADDRESS alloc_address = ActuallyAlignedFreeAddress(numpages, OldAddress, byte_alignment);
   if(alloc_address == ~0ULL)
   {
-    printf("Not enough space for AllocateFreeAddress (malloc). Unsafe to continue.\r\n");
+    error_printf("Not enough space for AllocateFreeAddress (malloc). Unsafe to continue.\r\n");
     return alloc_address;
   }
   else if(alloc_address == ~1ULL)
   {
-    printf("AllocateFreeAddress (malloc): Invalid byte alignment.\r\n");
+    error_printf("AllocateFreeAddress (malloc): Invalid byte alignment.\r\n");
     return alloc_address;
   }
 
@@ -3558,7 +3561,7 @@ EFI_PHYSICAL_ADDRESS AllocateFreeAddress(size_t numbytes, EFI_PHYSICAL_ADDRESS O
 
   if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
   {
-    printf("AllocateFreeAddress (malloc) area %#qx not found. Unsafe to continue program.\r\n", alloc_address);
+    error_printf("AllocateFreeAddress (malloc) area %#qx not found. Unsafe to continue program.\r\n", alloc_address);
     HaCF();
   }
 
@@ -3595,7 +3598,7 @@ EFI_VIRTUAL_ADDRESS VActuallyFreeAddress(size_t pages, EFI_VIRTUAL_ADDRESS OldAd
   {
     // Return address -1
 #ifdef MEMORY_CHECK_INFO
-    printf("No more free virtual addresses...\r\n");
+    error_printf("No more free virtual addresses...\r\n");
 #endif
     return ~0ULL;
   }
@@ -3648,7 +3651,7 @@ EFI_VIRTUAL_ADDRESS VActuallyFreeAddressByPage(size_t pages, EFI_VIRTUAL_ADDRESS
   if(DiscoveredAddress == ~0ULL)
   {
     // Return address -1
-    printf("No more free virtual addresses by 4kB page...\r\n");
+    error_printf("No more free virtual addresses by 4kB page...\r\n");
   }
 #endif
 
@@ -3675,7 +3678,7 @@ EFI_VIRTUAL_ADDRESS VActuallyAlignedFreeAddress(size_t pages, EFI_VIRTUAL_ADDRES
 
   if( (byte_alignment & EFI_PAGE_MASK) || (byte_alignment < EFI_PAGE_SIZE) ) // Needs to be a multiple of the memmap page size (4kB)
   {
-    printf("VActuallyAlignedFreeAddress: Invalid byte alignment value.\r\nMultiple of EFI_PAGE_SIZE (4kB per UEFI 2.x spec) required.\r\n");
+    error_printf("VActuallyAlignedFreeAddress: Invalid byte alignment value.\r\nMultiple of EFI_PAGE_SIZE (4kB per UEFI 2.x spec) required.\r\n");
     return ~1ULL;
 //    byte_alignment &= ~EFI_PAGE_MASK; // Force it to the nearest multiple of 4kB, rounding down such that, e.g., 6kb -> 4kB, 11kB -> 8kB, etc.
   }
@@ -3735,7 +3738,7 @@ EFI_VIRTUAL_ADDRESS VActuallyAlignedFreeAddress(size_t pages, EFI_VIRTUAL_ADDRES
   if(DiscoveredAddress == ~0ULL)
   {
     // Return address -1
-    printf("No more free virtual addresses aligned by %llu bytes...\r\n", byte_alignment);
+    error_printf("No more free virtual addresses aligned by %llu bytes...\r\n", byte_alignment);
   }
 #endif
 
@@ -3772,7 +3775,7 @@ EFI_VIRTUAL_ADDRESS VAllocateFreeAddress(size_t numbytes, EFI_VIRTUAL_ADDRESS Ol
   uint64_t memmap_check = MemMap_Prep(2);
   if(memmap_check)
   {
-    printf("VAllocateFreeAddress (vmalloc): Could not prep memory map...\r\n");
+    error_printf("VAllocateFreeAddress (vmalloc): Could not prep memory map...\r\n");
     return memmap_check;
   }
 
@@ -3790,12 +3793,12 @@ EFI_VIRTUAL_ADDRESS VAllocateFreeAddress(size_t numbytes, EFI_VIRTUAL_ADDRESS Ol
   EFI_VIRTUAL_ADDRESS alloc_address = VActuallyAlignedFreeAddress(numpages, OldAddress, byte_alignment);
   if(alloc_address == ~0ULL)
   {
-    printf("Not enough space for VAllocateFreeAddress (vmalloc). Unsafe to continue.\r\n");
+    error_printf("Not enough space for VAllocateFreeAddress (vmalloc). Unsafe to continue.\r\n");
     return alloc_address;
   }
   else if(alloc_address == ~1ULL)
   {
-    printf("VAllocateFreeAddress (vmalloc): Invalid byte alignment.\r\n");
+    error_printf("VAllocateFreeAddress (vmalloc): Invalid byte alignment.\r\n");
     return alloc_address;
   }
 
@@ -3952,7 +3955,7 @@ EFI_VIRTUAL_ADDRESS VAllocateFreeAddress(size_t numbytes, EFI_VIRTUAL_ADDRESS Ol
 
   if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
   {
-    printf("VAllocateFreeAddress (vmalloc) area %#qx not found. Unsafe to continue program.\r\n", alloc_address);
+    error_printf("VAllocateFreeAddress (vmalloc) area %#qx not found. Unsafe to continue program.\r\n", alloc_address);
     HaCF();
   }
 
@@ -4074,7 +4077,7 @@ void MergeContiguousConventionalMemory(void)
 
   if(numpages == 0)
   {
-    printf("Error: MergeContiguousConventionalMemory: MemMap not found. Has it not been set up yet?\r\n");
+    error_printf("Error: MergeContiguousConventionalMemory: MemMap not found. Has it not been set up yet?\r\n");
     HaCF();
   }
 
@@ -4252,7 +4255,7 @@ EFI_PHYSICAL_ADDRESS ZeroAllConventionalMemory(void)
 
       if(VerifyZeroMem(EFI_PAGES_TO_SIZE(Piece->NumberOfPages), Piece->PhysicalStart))
       {
-        printf("Area Not Zeroed! Base Physical Address: %#qx, Pages: %llu\r\n", Piece->PhysicalStart, Piece->NumberOfPages);
+        error_printf("Area Not Zeroed! Base Physical Address: %#qx, Pages: %llu\r\n", Piece->PhysicalStart, Piece->NumberOfPages);
         exit_value = Piece->PhysicalStart;
       }
       else

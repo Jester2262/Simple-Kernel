@@ -2,7 +2,7 @@
 rem
 rem =================================
 rem
-rem RELEASE VERSION 1.1
+rem RELEASE VERSION 1.11
 rem
 rem GCC (MinGW-w64) Kernel64 Windows Cleanup Script
 rem
@@ -34,6 +34,7 @@ rem
 
 del Kernel64.exe
 del Kernel64-Sandybridge.exe
+del Kernel64-Ryzen.exe
 del output.map
 del objects.list
 

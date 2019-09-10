@@ -64,8 +64,9 @@
 
 #include "Kernel64.h"
 
+
 // Stack size defined in number of bytes, e.g. (1 << 12) is 4kiB, (1 << 20) is 1MiB
-#define STACK_SIZE (1 << 20)
+#define STACK_SIZE (1ULL << 20)
 // This might allow for occasional slight performance increases. Not guaranteed to always happen, but aligning this to 64 bytes increases the probability.
 __attribute__((aligned(64))) static volatile unsigned char kernel_stack[STACK_SIZE] = {0};
 
@@ -167,29 +168,31 @@ const unsigned char load_image3[144] = {
 // Can't use local arrays in a naked function (at least, the compiler won't allow it, though it can be done with assembly)
 // They'll just need to take up some program RAM as global variables instead of stack space.
 
-__attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
+// __attribute__((naked)) goes in front of declaration (prototype in header, for example)
+// See https://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html or https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/4/html/Using_the_GNU_Compiler_Collection/function-attributes.html
+void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 {
   // First things first, set up a stack.
   // This is why having a naked function is important, otherwise the kernel would still be using the UEFI's stack as part of the function prolog (or prologue, if you must).
-  asm volatile ("leaq %[new_stack_base], %%rbp\n\t"
-                "leaq %[new_stack_end], %%rsp \n\t"
+  asm volatile ("leaq %[new_stack_end], %%rsp"
                 : // No outputs
-                : [new_stack_base] "m" (kernel_stack[0]), [new_stack_end] "m" (kernel_stack[STACK_SIZE]) // Inputs; %rsp is decremented before use, so STACK_SIZE is used instead of STACK_SIZE - 1
-                : // No clobbers
+                : [new_stack_end] "m" (kernel_stack[STACK_SIZE]) // Inputs; %rsp is decremented before use, so STACK_SIZE is used instead of STACK_SIZE - 1
+                : // No clobbers. Don't tell GCC that %rsp is getting cobbered. It doesn't need to know and it won't "proceed like nothing's up" like it should.
               );
 
   // Now initialize the system (Virtual mappings (identity-map), printf, AVX, any straggling control registers, HWP, maskable interrupts)
   System_Init(LP); // See System.c for what this does. One step is involves calling a function that can re-assign printf to a different GPU.
-
+  
   // Main Body Start
   uint64_t start_time = get_tick();
 
-//  bitmap_bitswap(load_image, 12, 27, swapped_image);
-//  bitmap_bytemirror(load_image2, 24, 27, swapped_image);
-  bitmap_bitreverse(load_image2, 24, 27, swapped_image);
+  unsigned char * swapped_image = (unsigned char *)malloc(96);
+//  bitmap_bitswap(load_image, 27, 12, swapped_image);
+//  bitmap_bytemirror(load_image2, 27, 24, swapped_image);
+  bitmap_bitreverse(load_image2, 27, 24, swapped_image);
   for(UINT64 k = 0; k < LP->GPU_Configs->NumberOfFrameBuffers; k++) // Multi-GPU support!
   {
-    bitmap_anywhere_scaled(LP->GPU_Configs->GPUArray[k], swapped_image, 24, 27, 0x0000FFFF, 0x00FF0000, ((LP->GPU_Configs->GPUArray[k].Info->HorizontalResolution - 5*27) >>  1), ((LP->GPU_Configs->GPUArray[k].Info->VerticalResolution - 5*24) >> 1), 10, 3);
+    bitmap_anywhere_scaled(LP->GPU_Configs->GPUArray[k], swapped_image, 27, 24, 0x0000FFFF, 0x00FF0000, ((LP->GPU_Configs->GPUArray[k].Info->HorizontalResolution - 5*27) >>  1), ((LP->GPU_Configs->GPUArray[k].Info->VerticalResolution - 5*24) >> 1), 10, 3);
   }
 
   Print_Loader_Params(LP);
@@ -204,17 +207,62 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   Get_Manufacturer_ID(Manufacturer_ID); // Returns a char* pointer to Manufacturer_ID. Don't need it here, though.
   printf("%s\r\n\n", Manufacturer_ID);
 
-  print_system_memmap();
+//  print_system_memmap();
   printf("Total EfiConventionalMemory: %llu\r\n", GetFreeSystemRam());
   printf("Total Installed RAM: %qu\r\n", GetInstalledSystemRam(LP->ConfigTables, LP->Number_of_ConfigTables));
 
 //  ZeroAllConventionalMemory();
+
   free(brandstring);
   free(Manufacturer_ID);
+
   print_system_memmap();
 
   uint64_t end_time = get_tick();
-  printf("Result: start: %qu end: %qu diff: %qu", start_time, end_time, end_time - start_time);
+  printf("Result: start: %qu end: %qu diff: %qu\r\n", start_time, end_time, end_time - start_time);
+
+  Draw_vector(Global_Print_Info.defaultGPU, 500, 500, 500, 700, 0x000000FF); // |
+  Draw_vector(Global_Print_Info.defaultGPU, 500, 500, 700, 500, 0x000000FF); // --
+  Draw_vector(Global_Print_Info.defaultGPU, 700, 700, 700, 500, 0x000000FF); //  |
+  Draw_vector(Global_Print_Info.defaultGPU, 700, 700, 500, 700, 0x000000FF); // __
+
+  for(uint64_t offsetter = 1; offsetter < 20; offsetter++)
+  {
+    Draw_vector(Global_Print_Info.defaultGPU, 500 - offsetter, 500 - offsetter, 500 - offsetter, 700 + offsetter, 0x008800FF); // |
+    Draw_vector(Global_Print_Info.defaultGPU, 500 - offsetter, 500 - offsetter, 700 + offsetter, 500 - offsetter, 0x008800FF); // --
+    Draw_vector(Global_Print_Info.defaultGPU, 700 + offsetter, 700 + offsetter, 700 + offsetter, 500 - offsetter, 0x008800FF); //  |
+    Draw_vector(Global_Print_Info.defaultGPU, 700 + offsetter, 700 + offsetter, 500 - offsetter, 700 + offsetter, 0x008800FF); // __
+  }
+
+  for(uint64_t variable_with_non_conflicting_name = 0; variable_with_non_conflicting_name < 20; variable_with_non_conflicting_name++)
+  {
+    Draw_vector(Global_Print_Info.defaultGPU, 600, 600, 500, 700 - variable_with_non_conflicting_name*10, 0x00FF0000); // > R
+    Draw_vector(Global_Print_Info.defaultGPU, 600, 600, 500 + variable_with_non_conflicting_name*10, 500, 0x0000FF00); // v G
+    Draw_vector(Global_Print_Info.defaultGPU, 600, 600, 700, 500 + variable_with_non_conflicting_name*10, 0x000000FF); // < B
+    Draw_vector(Global_Print_Info.defaultGPU, 600, 600, 700 - variable_with_non_conflicting_name*10, 700, 0x00FFFFFF); // ^ W
+  }
+
+  for(uint64_t circle_offsetter = 0; circle_offsetter <= 360; circle_offsetter++)
+  {
+    Draw_vector_polar(Global_Print_Info.defaultGPU, 400, 400, circle_offsetter, circle_offsetter, 0x00FFFF00);
+  }
+
+  Draw_vector(Global_Print_Info.defaultGPU, 100, 700, 400, 725, 0x00FF00FF);
+
+  Draw_arc(Global_Print_Info.defaultGPU, 600, 100, 50, 0, 0, -45, 90, 0x00FF0000);
+  Draw_arc(Global_Print_Info.defaultGPU, 600, 100, -50, 0, 0, -45, 90, 0x00FF00FF);
+  Draw_arc(Global_Print_Info.defaultGPU, 600, 100, 50, 0, 0, -45, -90, 0x00FFFF00);
+  Draw_arc(Global_Print_Info.defaultGPU, 600, 100, 50, 0, 0, 135, -90, 0x0000FFFF);
+
+  for(uint32_t wide_arc = 0; wide_arc < 3; wide_arc++)
+  {
+    for(uint32_t tall_arc = 0; tall_arc < 3; tall_arc++)
+    {
+      Draw_arc(Global_Print_Info.defaultGPU, 511+wide_arc, 383+tall_arc, 0, 1, 10, 245, -960, 0x00FF0000); // SSSSEEEEGGGAAAAA!!!
+    }
+  }
+
+  Draw_filled_rectangle(Global_Print_Info.defaultGPU, 500, 500, 200, 200, 0x00FFFF00);
 
 /*
   printf("Avg CPU freq: %qu\r\n", get_CPU_freq(NULL, 0));
@@ -247,7 +295,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jne Loop0\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -257,7 +305,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jne Loop7\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -267,7 +315,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jne Loop8\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -277,7 +325,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jne Loop9\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -287,7 +335,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jne Loop10\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -297,7 +345,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jne Loop11\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   Colorscreen(LP->GPU_Configs->GPUArray[0], 0x000000FF); // Blue in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
@@ -315,7 +363,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jnz Loop1\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   Colorscreen(LP->GPU_Configs->GPUArray[0], 0x0000FF00); // Green in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
@@ -330,7 +378,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jnz Loop2\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   Colorscreen(LP->GPU_Configs->GPUArray[0], 0x00FF0000); // Red in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
@@ -358,7 +406,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jnz Loop3\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -367,7 +415,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jnz Loop5\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
@@ -376,7 +424,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jnz Loop6\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   Blackscreen(LP->GPU_Configs->GPUArray[0]); // X in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
@@ -393,7 +441,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
                 "jnz Loop4\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
                 : // no outputs
                 : // no inputs
-                : // no clobbers
+                : "%eax" // clobbers
               );
 
   // For shutdown, need to know if system is ACPI hardware-reduced or using legacy ACPI. There's a flag in FADT.
@@ -420,26 +468,26 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 
 //  printf("%#qx\r\n", Acpi20TableGuid);
 
-  for(uint64_t i = 0; i < LP->Number_of_ConfigTables; i++)
+  for(uint64_t i1 = 0; i1 < LP->Number_of_ConfigTables; i1++)
   {
-    printf("Table %llu GUID: %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\r\n", i,
-            LP->ConfigTables[i].VendorGuid.Data1,
-            LP->ConfigTables[i].VendorGuid.Data2,
-            LP->ConfigTables[i].VendorGuid.Data3,
-            LP->ConfigTables[i].VendorGuid.Data4[0],
-            LP->ConfigTables[i].VendorGuid.Data4[1],
-            LP->ConfigTables[i].VendorGuid.Data4[2],
-            LP->ConfigTables[i].VendorGuid.Data4[3],
-            LP->ConfigTables[i].VendorGuid.Data4[4],
-            LP->ConfigTables[i].VendorGuid.Data4[5],
-            LP->ConfigTables[i].VendorGuid.Data4[6],
-            LP->ConfigTables[i].VendorGuid.Data4[7]
+    printf("Table %llu GUID: %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\r\n", i1,
+            LP->ConfigTables[i1].VendorGuid.Data1,
+            LP->ConfigTables[i1].VendorGuid.Data2,
+            LP->ConfigTables[i1].VendorGuid.Data3,
+            LP->ConfigTables[i1].VendorGuid.Data4[0],
+            LP->ConfigTables[i1].VendorGuid.Data4[1],
+            LP->ConfigTables[i1].VendorGuid.Data4[2],
+            LP->ConfigTables[i1].VendorGuid.Data4[3],
+            LP->ConfigTables[i1].VendorGuid.Data4[4],
+            LP->ConfigTables[i1].VendorGuid.Data4[5],
+            LP->ConfigTables[i1].VendorGuid.Data4[6],
+            LP->ConfigTables[i1].VendorGuid.Data4[7]
           );
 
-    if(!(AVX_memcmp(&LP->ConfigTables[i].VendorGuid, &Acpi20TableGuid, 16, 0)))
+    if(!(AVX_memcmp(&LP->ConfigTables[i1].VendorGuid, &Acpi20TableGuid, 16, 0)))
     {
       printf("RSDP 2.0 found!\r\n");
-      RSDP_index = i;
+      RSDP_index = i1;
       RSDPfound = 2;
       break;
     }
@@ -447,12 +495,12 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   // If no RSDP 2.0, check for 1.0
   if(!RSDPfound)
   {
-    for(uint64_t i=0; i < LP->Number_of_ConfigTables; i++)
+    for(uint64_t i2 = 0; i2 < LP->Number_of_ConfigTables; i2++)
     {
-      if(!(AVX_memcmp(&LP->ConfigTables[i].VendorGuid, &Acpi10TableGuid, 16, 0)))
+      if(!(AVX_memcmp(&LP->ConfigTables[i2].VendorGuid, &Acpi10TableGuid, 16, 0)))
       {
         printf("RSDP 1.0 found!\r\n");
-        RSDP_index = i;
+        RSDP_index = i2;
         RSDPfound = 1;
         break;
       }
@@ -468,12 +516,12 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   int is_hardware_reduced_ACPI = 0;
   XSDT_STRUCT * xsdt = (XSDT_STRUCT*) ((RSDP_20_STRUCT *)LP->ConfigTables[RSDP_index].VendorTable)->XSDTAddress;
 
-  for(uint64_t i = 0; i < ((xsdt->SDTHeader.Length - sizeof(SDT_HEADER_STRUCT)) >> 3); i++)
+  for(uint64_t i3 = 0; i3 < ((xsdt->SDTHeader.Length - sizeof(SDT_HEADER_STRUCT)) >> 3); i3++)
   {
-    if(!(AVX_memcmp(((SDT_HEADER_STRUCT*)xsdt->Entry[i])->Signature, "FACP", 4, 0)))
+    if(!(AVX_memcmp(((SDT_HEADER_STRUCT*)xsdt->Entry[i3])->Signature, "FACP", 4, 0)))
     {
       // Found FADT
-      uint32_t fadt_flags = *((uint32_t*) &((uint8_t*)xsdt->Entry[i])[112]); // Byte offset 112 has the flags
+      uint32_t fadt_flags = *((uint32_t*) &((uint8_t*)xsdt->Entry[i3])[112]); // Byte offset 112 has the flags
       printf("FADT Flags: %#x\r\n", fadt_flags);
       if(fadt_flags & (1 << 20))
       {
@@ -481,7 +529,7 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
         is_hardware_reduced_ACPI = 1;
       }
 
-      printf("hvi: %#qx\r\n", *((uint64_t*) &((uint8_t*)xsdt->Entry[i])[268])); // MsHyperV
+      printf("hvi: %#qx\r\n", *((uint64_t*) &((uint8_t*)xsdt->Entry[i3])[268])); // MsHyperV
       // Done here
       break;
     }
@@ -519,7 +567,6 @@ __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
     }
   }*/
   error_printf("What? Can this thing not shut down on its own?? Please force power off.\r\n");
-
   HaCF();
 }
 // END MAIN

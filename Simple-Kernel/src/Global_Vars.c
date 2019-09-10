@@ -28,14 +28,20 @@
 // For more information about global variable definitions and declarations, see here:
 // https://stackoverflow.com/questions/1433204/how-do-i-use-extern-to-share-variables-between-source-files
 //
-// Oh, and in C it is mandatory that global variables be initialized to 0. To define a "global, read-only constant" the constant
-// should be defined as "static const" in a header file that is common to all the .c files that need to access the constant. A
-// global read-only constant can be thought of as a read-only data type that is initialized to a non-zero value. Normally, a
-// downside of being static in a common header means the constant will take up space in every translation unit (think of it like
-// each .c file gets its own copy of a variable defined as "static" in a common header, and changing it in one .c file has no impact
-// on other files). However, GCC merges constants with the "fmerge-constants" flag (on by default), so "static const" actually share
-// the same definition and don't hog unnecessary space. NOTE: "fmerge-constants" is not the same as "fmerge-all-constants"; the
-// latter also merges variables with the same name between different compilation units, which can have all kinds of weird results.
+// To define a "global, read-only constant" the constant should be defined as "static const" in a header file that is common to all
+// the .c files that need to access the constant. A global read-only constant can be thought of as a read-only data type that is
+// initialized to a non-zero value. Normally, a downside of being static in a common header means the constant will take up space in
+// every translation unit (think of it like each .c file gets its own copy of a variable defined as "static" in a common header, and
+// changing it in one .c file has no impact on other files). However, GCC merges constants with the "fmerge-constants" flag (on by
+// default), so "static const" actually share the same definition and don't hog unnecessary space when that's used.
+//
+// NOTE: "fmerge-constants" is not the same as "fmerge-all-constants"; the latter also merges variables with the same name between
+// different compilation units, which can have all kinds of weird results. Merging constants is not part of the C standard, though,
+// so both are disabled here in compiler invocations. Enabling either risks breaking these variables and, as far as I've seen,
+// they'll break in a way that defeats the whole purpose of global variables. See: https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html
+//
+// TIP: Initialize global variables here with data so that compilers put these in the .data section without a linkerscript. Being in
+// the .data section means they'll have their own space in the binary and won't be at risk of any funky business messing with them.
 //
 
 #include "Kernel64.h"
@@ -100,7 +106,8 @@ typedef struct {
   UINT32                             textscrollmode;   // What to do when a newline goes off the bottom of the screen: 0 = scroll entire screen, 1 = wrap around to the top
 } GLOBAL_PRINT_INFO_STRUCT;
 */
-GLOBAL_PRINT_INFO_STRUCT Global_Print_Info = {0};
+
+GLOBAL_PRINT_INFO_STRUCT Global_Print_Info = {{1, 1, NULL, 1, 1, 1}, 8, 8, 0x0, 0x0, 0x0, 0, 0, 1, 1, 0, 0, 0};
 
 //----------------------------------------------------------------------------------------------------------------------------------
 // Memory
@@ -115,12 +122,8 @@ typedef struct {
   UINT32                  Pad;                     // Pad to multiple of 64 bits
 } GLOBAL_MEMORY_INFO_STRUCT;
 */
-GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info = {0};
+GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info = {1, 1, NULL, 1, 0};
 
 //----------------------------------------------------------------------------------------------------------------------------------
 // Misc
 //----------------------------------------------------------------------------------------------------------------------------------
-
-// For kernel_main(), since naked functions can't have local variables that require stack space
-unsigned char swapped_image[96] = {0};
-unsigned char swapped_image2[96] = {0};

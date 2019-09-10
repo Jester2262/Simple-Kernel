@@ -19,6 +19,21 @@
 // Set the default font with this
 #define SYSTEMFONT font8x8_basic // Must be set up in UTF-8
 
+static inline uint32_t output_render_ctz_32(uint32_t input);
+static inline int64_t int_abs(int64_t x);
+
+// Don't use these trig functions for anything important. FSIN and FCOS have accuracy problems:
+// https://randomascii.wordpress.com/2014/10/09/intel-underestimates-error-bounds-by-1-3-quintillion/
+// They are used here simply because they're useful for a quick way to draw things on screen.
+static inline double quick_cos_deg(double x);
+static inline double quick_sin_deg(double x);
+static inline double * quick_sincos_deg(double * x);
+
+static inline double quick_cos_rad(double x);
+static inline double quick_sin_rad(double x);
+static inline double * quick_sincos_rad(double * two_x);
+
+
 //----------------------------------------------------------------------------------------------------------------------------------
 // Initialize_Global_Printf_Defaults: Set Up Printf
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -26,7 +41,7 @@
 // Initialize printf and bind it to a specific GPU framebuffer.
 //
 
-void Initialize_Global_Printf_Defaults(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU)
+__attribute__((target("no-sse"))) void Initialize_Global_Printf_Defaults(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU)
 {
   // Set global default print information--needed for printf
   Global_Print_Info.defaultGPU = GPU;
@@ -35,7 +50,7 @@ void Initialize_Global_Printf_Defaults(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU)
   Global_Print_Info.font_color = 0x00FFFFFF; // Default font color; GPU.Info->PixelFormat will probably always be PixelBlueGreenRedReserved8BitPerColor thanks to Windows requirements here: https://docs.microsoft.com/en-us/windows-hardware/test/hlk/testref/6afc8979-df62-4d86-8f6a-99f05bbdc7f3#more-information
   // Even if the above is not the Windows-required color order, white is still 0x00FFFFFF for PixelRedGreenBlueReserved8BitPerColor, and black is always 0.
   // PixelBltOnly is not supported, and PixelBitMask might exist for specialized things. The conditional at the end of this function handles PixelBitMask.
-  Global_Print_Info.highlight_color = 0xFF000000; // Default highlight color
+  Global_Print_Info.highlight_color = 0x00000000; // Default highlight color
   Global_Print_Info.background_color = 0x00000000; // Default background color
   Global_Print_Info.x = 0; // Leftmost x-coord that's in-bounds (NOTE: per UEFI Spec 2.7 Errata A, (0,0) is always the top left in-bounds pixel.)
   Global_Print_Info.y = 0; // Topmost y-coord
@@ -90,52 +105,45 @@ void Initialize_Global_Printf_Defaults(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU)
 // string: printf-style string
 //
 
-void formatted_string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, const char * string, ...)
+void formatted_string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, const char * string, ...)
 {
   // Height in number of bytes and width in number of bits, per character where "character" is an array of bytes, e.g. { 0x3E, 0x63, 0x7B, 0x7B, 0x7B, 0x03, 0x1E, 0x00}, which is U+0040 (@). This is an 8x8 '@' sign.
-  if((height > GPU.Info->VerticalResolution) || (width > GPU.Info->HorizontalResolution)) // Need some kind of error indicator (makes screen red)
+  if(x >= GPU.Info->HorizontalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.RedMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x00FF0000); // Makes screen red
-    }
-  } // Could use an instruction like ARM's USAT to truncate values
-  else if((x > GPU.Info->HorizontalResolution) || (y > GPU.Info->VerticalResolution))
-  {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.GreenMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x0000FF00); // Makes screen green
-    }
+    error_printf("formatted_string_anywhere_scaled error: x is larger than horizontal resolution.\r\n");
+    return ;
   }
-  else if (((y + yscale*height) > GPU.Info->VerticalResolution) || ((x + xscale*width) > GPU.Info->HorizontalResolution))
+  else if(y >= GPU.Info->VerticalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.BlueMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x000000FF); // Makes screen blue
-    }
+    error_printf("formatted_string_anywhere_scaled error: y is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if((x + xscale*width) > GPU.Info->HorizontalResolution)
+  {
+    error_printf("formatted_string_anywhere_scaled error: (x + xscale*width) is larger than horizontal resolution.\r\n");
+    return ;
+  }
+  else if((y + yscale*height) > GPU.Info->VerticalResolution)
+  {
+    error_printf("formatted_string_anywhere_scaled error: (y + yscale*height) is larger than vertical resolution.\r\n");
+    return ;
   }
 
   va_list arguments;
+  int buffersize;
+  char * output_string;
 
   va_start(arguments, string);
-  ssize_t buffersize = vsnprintf(NULL, 0, string, arguments); // Get size of needed buffer, though (v)snprintf does not account for \0
-  void * output_string = malloc(buffersize + 1); // Haha, yes! :) Realistically this'll only ever need 1 UEFI page at a time. But hey, now the string size is basically unlimited!
-  vsprintf((char*)output_string, string, arguments); // Write string to buffer
+  buffersize = vsnprintf(NULL, 0, string, arguments); // Get size of needed buffer, though (v)snprintf does not account for \0
   va_end(arguments);
 
-  string_anywhere_scaled(GPU, output_string, height, width, font_color, highlight_color, x, y, xscale, yscale);
+  output_string = (char*)malloc(buffersize + 1); // Haha, yes! :) Realistically this'll only ever need 1 UEFI page at a time. But hey, now the string size is basically unlimited!
+
+  va_start(arguments, string); // Restart variadic arguments cursor
+  vsprintf(output_string, string, arguments); // Write string to buffer
+  va_end(arguments);
+
+  string_anywhere_scaled(GPU, output_string, width, height, font_color, highlight_color, x, y, xscale, yscale);
 
   free(output_string); // Free malloc'd memory
 }
@@ -234,20 +242,27 @@ void Colorscreen(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 color)
 // Screen turns red if a pixel is put outside the visible area.
 void single_pixel(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x, UINT32 y, UINT32 color)
 {
-  if((y > GPU.Info->VerticalResolution) || (x > GPU.Info->HorizontalResolution)) // Need some kind of error indicator (makes screen red)
+  if(x >= GPU.Info->HorizontalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.RedMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x00FF0000); // Makes screen red
-    }
+    error_printf("single_pixel error: x is larger than horizontal resolution.\r\n");
+    return ;
+  }
+  else if(y >= GPU.Info->VerticalResolution)
+  {
+    error_printf("single_pixel error: y is larger than vertical resolution.\r\n");
+    return ;
   }
 
-  *(UINT32*)(GPU.FrameBufferBase + (y * GPU.Info->PixelsPerScanLine + x) * 4) = color;
-//  Output_render(GPU, 0x01, 1, 1, color, 0xFF000000, x, y, 1, 1, 0); // Make highlight transparent to skip that part of output render (transparent = no highlight)
+  uint32_t transparency_color = 0xFF000000;
+  if(GPU.Info->PixelFormat == PixelBitMask)
+  {
+    transparency_color = GPU.Info->PixelInformation.ReservedMask;
+  }
+
+  if( !(color & transparency_color) )
+  {
+    *(UINT32*)(GPU.FrameBufferBase + (y * GPU.Info->PixelsPerScanLine + x) * 4) = color;
+  }
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -263,22 +278,21 @@ void single_pixel(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x, UINT32 y, UIN
 // highlight_color: highlight/background color for the string's characters (it's called highlight color in word processors)
 //
 
-void single_char(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color)
+void single_char(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color)
 {
   // Assuming "character" is an array of bytes, e.g. { 0x3E, 0x63, 0x7B, 0x7B, 0x7B, 0x03, 0x1E, 0x00}, which would be U+0040 (@) -- an 8x8 '@' sign.
-  if((height > GPU.Info->VerticalResolution) || (width > GPU.Info->HorizontalResolution))
+  if(width > GPU.Info->HorizontalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.RedMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x00FF0000); // Makes screen red
-    }
-  } // Could use an instruction like ARM's USAT to truncate values
+    error_printf("single_char error: width is larger than horizontal resolution.\r\n");
+    return ;
+  }
+  else if(height > GPU.Info->VerticalResolution)
+  {
+    error_printf("single_char error: height is larger than vertical resolution.\r\n");
+    return ;
+  }
 
-  Output_render_text(GPU, character, height, width, font_color, highlight_color, 0, 0, 1, 1, 0);
+  Output_render_text(GPU, character, width, height, font_color, highlight_color, 0, 0, 1, 1, 0);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -295,44 +309,31 @@ void single_char(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 he
 // x and y: coordinate positions of the top leftmost pixel of the string
 //
 
-void single_char_anywhere(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y)
+void single_char_anywhere(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y)
 {
   // Assuming "character" is an array of bytes, e.g. { 0x3E, 0x63, 0x7B, 0x7B, 0x7B, 0x03, 0x1E, 0x00}, which would be U+0040 (@) -- an 8x8 '@' sign.
-  if((height > GPU.Info->VerticalResolution) || (width > GPU.Info->HorizontalResolution)) // Need some kind of error indicator (makes screen red)
+  if(x >= GPU.Info->HorizontalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.RedMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x00FF0000); // Makes screen red
-    }
-  } // Could use an instruction like ARM's USAT to truncate values
-  else if((x > GPU.Info->HorizontalResolution) || (y > GPU.Info->VerticalResolution))
-  {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.GreenMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x0000FF00); // Makes screen green
-    }
+    error_printf("single_char_anywhere error: x is larger than horizontal resolution.\r\n");
+    return ;
   }
-  else if (((y + height) > GPU.Info->VerticalResolution) || ((x + width) > GPU.Info->HorizontalResolution))
+  else if(y >= GPU.Info->VerticalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.BlueMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x000000FF); // Makes screen blue
-    }
+    error_printf("single_char_anywhere error: y is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if((x + width) > GPU.Info->HorizontalResolution)
+  {
+    error_printf("single_char_anywhere error: (x + width) is larger than horizontal resolution.\r\n");
+    return ;
+  }
+  else if((y + height) > GPU.Info->VerticalResolution)
+  {
+    error_printf("single_char_anywhere error: (y + height) is larger than vertical resolution.\r\n");
+    return ;
   }
 
-  Output_render_text(GPU, character, height, width, font_color, highlight_color, x, y, 1, 1, 0);
+  Output_render_text(GPU, character, width, height, font_color, highlight_color, x, y, 1, 1, 0);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -350,44 +351,31 @@ void single_char_anywhere(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, 
 // xscale and yscale: horizontal and vertical integer font scaling factors >= 1
 //
 
-void single_char_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale)
+void single_char_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale)
 {
   // Assuming "character" is an array of bytes, e.g. { 0x3E, 0x63, 0x7B, 0x7B, 0x7B, 0x03, 0x1E, 0x00}, which would be U+0040 (@) -- an 8x8 '@' sign.
-  if((height > GPU.Info->VerticalResolution) || (width > GPU.Info->HorizontalResolution)) // Need some kind of error indicator (makes screen red)
+  if(x >= GPU.Info->HorizontalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.RedMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x00FF0000); // Makes screen red
-    }
-  } // Could use an instruction like ARM's USAT to truncate values
-  else if((x > GPU.Info->HorizontalResolution) || (y > GPU.Info->VerticalResolution))
-  {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.GreenMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x0000FF00); // Makes screen green
-    }
+    error_printf("single_char_anywhere_scaled error: x is larger than horizontal resolution.\r\n");
+    return ;
   }
-  else if (((y + yscale*height) > GPU.Info->VerticalResolution) || ((x + xscale*width) > GPU.Info->HorizontalResolution))
+  else if(y >= GPU.Info->VerticalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.BlueMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x000000FF); // Makes screen blue
-    }
+    error_printf("single_char_anywhere_scaled error: y is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if((x + xscale*width) > GPU.Info->HorizontalResolution)
+  {
+    error_printf("single_char_anywhere_scaled error: (x + xscale*width) is larger than horizontal resolution.\r\n");
+    return ;
+  }
+  else if((y + yscale*height) > GPU.Info->VerticalResolution)
+  {
+    error_printf("single_char_anywhere_scaled error: (y + yscale*height) is larger than vertical resolution.\r\n");
+    return ;
   }
 
-  Output_render_text(GPU, character, height, width, font_color, highlight_color, x, y, xscale, yscale, 0);
+  Output_render_text(GPU, character, width, height, font_color, highlight_color, x, y, xscale, yscale, 0);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -408,40 +396,27 @@ void single_char_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int char
 // This function allows direct output of a pre-made string, either a hardcoded one or one made via sprintf.
 //
 
-void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * string, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale)
+void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * string, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale)
 {
-  if((height > GPU.Info->VerticalResolution) || (width > GPU.Info->HorizontalResolution)) // Need some kind of error indicator (makes screen red)
+  if(x >= GPU.Info->HorizontalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.RedMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x00FF0000); // Makes screen red
-    }
-  } // Could use an instruction like ARM's USAT to truncate values
-  else if((x > GPU.Info->HorizontalResolution) || (y > GPU.Info->VerticalResolution))
-  {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.GreenMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x0000FF00); // Makes screen green
-    }
+    error_printf("string_anywhere_scaled error: x is larger than horizontal resolution.\r\n");
+    return ;
   }
-  else if (((y + yscale*height) > GPU.Info->VerticalResolution) || ((x + xscale*width) > GPU.Info->HorizontalResolution))
+  else if(y >= GPU.Info->VerticalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.BlueMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x000000FF); // Makes screen blue
-    }
+    error_printf("string_anywhere_scaled error: y is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if((x + xscale*width) > GPU.Info->HorizontalResolution)
+  {
+    error_printf("string_anywhere_scaled error: (x + xscale*width) is larger than horizontal resolution.\r\n");
+    return ;
+  }
+  else if((y + yscale*height) > GPU.Info->VerticalResolution)
+  {
+    error_printf("string_anywhere_scaled error: (y + yscale*height) is larger than vertical resolution.\r\n");
+    return ;
   }
 
   //mapping: x*4 + y*4*(PixelsPerScanLine), x is column number, y is row number; every 4*PixelsPerScanLine bytes is a new row
@@ -455,7 +430,7 @@ void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * 
   {
     // match the character to the font, using UTF-8.
     // This would expect a font array to include everything in the UTF-8 character set... Or just use the most common ones.
-    Output_render_text(GPU, string[index], height, width, font_color, highlight_color, x, y, xscale, yscale, index);
+    Output_render_text(GPU, string[index], width, height, font_color, highlight_color, x, y, xscale, yscale, index);
     index++;
   } // end while
 } // end function
@@ -475,10 +450,9 @@ void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * 
 // index: mainly for strings, it's for keeping track of which character in the string is being output
 //
 
-void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index)
+void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index)
 {
-  Output_render_bitmap(GPU, SYSTEMFONT[character], height, width, font_color, highlight_color, x, y, xscale, yscale, index);
-  // Can also make a 'draw filled-in scaled rectangle' function now...
+  Output_render_bitmap(GPU, SYSTEMFONT[character], width, height, font_color, highlight_color, x, y, xscale, yscale, index);
 }
 
 
@@ -502,44 +476,31 @@ void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UI
 // Note that single_char_anywhere_scaled() takes 'a' or 'b', this would take something like character_array['a'] instead.
 //
 
-void bitmap_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale)
+void bitmap_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale)
 {
   // Assuming "bitmap" is an array of bytes, e.g. { 0x3E, 0x63, 0x7B, 0x7B, 0x7B, 0x03, 0x1E, 0x00}, which would be U+0040 (@) -- an 8x8 '@' sign.
-  if((height > GPU.Info->VerticalResolution) || (width > GPU.Info->HorizontalResolution)) // Need some kind of error indicator (makes screen red)
+  if(x >= GPU.Info->HorizontalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.RedMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x00FF0000); // Makes screen red
-    }
-  } // Could use an instruction like ARM's USAT to truncate values
-  else if((x > GPU.Info->HorizontalResolution) || (y > GPU.Info->VerticalResolution))
-  {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.GreenMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x0000FF00); // Makes screen green
-    }
+    error_printf("bitmap_anywhere_scaled error: x is larger than horizontal resolution.\r\n");
+    return ;
   }
-  else if (((y + yscale*height) > GPU.Info->VerticalResolution) || ((x + xscale*width) > GPU.Info->HorizontalResolution))
+  else if(y >= GPU.Info->VerticalResolution)
   {
-    if(GPU.Info->PixelFormat == PixelBitMask)
-    {
-      Colorscreen(GPU, GPU.Info->PixelInformation.BlueMask);
-    }
-    else
-    {
-      Colorscreen(GPU, 0x000000FF); // Makes screen blue
-    }
+    error_printf("bitmap_anywhere_scaled error: y is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if((x + xscale*width) > GPU.Info->HorizontalResolution)
+  {
+    error_printf("bitmap_anywhere_scaled error: (x + xscale*width) is larger than horizontal resolution.\r\n");
+    return ;
+  }
+  else if((y + yscale*height) > GPU.Info->VerticalResolution)
+  {
+    error_printf("bitmap_anywhere_scaled error: (y + yscale*height) is larger than vertical resolution.\r\n");
+    return ;
   }
 
-  Output_render_bitmap(GPU, bitmap, height, width, font_color, highlight_color, x, y, xscale, yscale, 0);
+  Output_render_bitmap(GPU, bitmap, width, height, font_color, highlight_color, x, y, xscale, yscale, 0);
 }
 
 
@@ -557,36 +518,11 @@ void bitmap_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigne
 // xscale and yscale: horizontal and vertical integer scaling factors >= 1
 // index: mainly for strings, it's for keeping track of which character in the string is being output
 //
-// This is essentially the same thing as Output_render_text(), but for bitmaps that are not part of the default font.
-//
 // Note that single_char_anywhere_scaled() takes 'a' or 'b', this would take something like character_array['a'] instead.
 //
 
-// GCC has an issue where it will sign-extend a value being used with bsf/tzcnt... See discussion at: https://stackoverflow.com/questions/48634422/can-i-get-rid-of-a-sign-extend-between-ctz-and-addition-to-a-pointer
-// This function is basically the same as __builtin_ctz(), but
-static inline uint32_t output_render_ctz_32(uint32_t input)
-{
-  uint32_t output;
-
-#ifdef __AVX2__
-  asm volatile("tzcntl %[in], %[out]"
-              : [out] "=a" (output)
-              : [in] "b" (input)
-              : // No clobbers
-              );
-#else
-  asm volatile("bsfl %[in], %[out]"
-              : [out] "=a" (output)
-              : [in] "b" (input)
-              : // No clobbers
-              );
-#endif
-
-  return output;
-}
-
 // "Unwrapped" Version
-void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index)
+void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index)
 {
   // Compact ceiling function, so that size doesn't need to be passed in
   uint32_t row_iterator = (width >> 3); // How many bytes are in a row
@@ -909,6 +845,29 @@ void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned 
   // Each pixel of output is ultimately being computed like this: *(UINT32*)(GPU.FrameBufferBase + ((y*GPU.Info->PixelsPerScanLine + x) + yscale*row*GPU.Info->PixelsPerScanLine + xscale*bit + (b*GPU.Info->PixelsPerScanLine + a) + xscale * index * width)*4) = font/highlight_color;
 }
 
+// GCC has an issue where it will sign-extend a value being used with bsf/tzcnt... See discussion at: https://stackoverflow.com/questions/48634422/can-i-get-rid-of-a-sign-extend-between-ctz-and-addition-to-a-pointer
+// This function is basically the same as __builtin_ctz(), but having this could be useful if that issue crops up somewhere.
+static inline uint32_t output_render_ctz_32(uint32_t input)
+{
+  uint32_t output;
+
+#ifdef __AVX2__
+  asm volatile("tzcntl %[in], %[out]"
+              : [out] "=a" (output)
+              : [in] "b" (input)
+              : // No clobbers
+              );
+#else
+  asm volatile("bsfl %[in], %[out]"
+              : [out] "=a" (output)
+              : [in] "b" (input)
+              : // No clobbers
+              );
+#endif
+
+  return output;
+}
+
 //
 // Extra bitmap rendering method notes:
 //
@@ -1028,7 +987,7 @@ void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned 
 /*
 // OLD BITMAP RENDERER BELOW
 // "Conditional Branch" Version
-void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 height, UINT32 width, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index)
+void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 width, UINT32 height,, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index)
 {
   // Compact ceiling function, so that size doesn't need to be passed in
   uint32_t row_iterator = (width >> 3); // How many bytes are in a row
@@ -1175,12 +1134,671 @@ void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned 
 // constrained to be multiples of 8 in width (fastest).
 //
 
-/*
-void Output_render_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_final, UINT32 y_final, UINT32 color, UINT32 xscale, UINT32 yscale)
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_vector: Draw A Vector from A to B
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This function draws a vector from point A to point B, including the end points. Because it's a vector, direction also matters...
+// Well, at least for calculating the line it does. For users only the end points matter. :)
+//
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x_init and y_init: (x,y) coordinates on the screen of point A, relative to the top left corner ((0,0))
+// x_final and y_final: (x,y) coordinates on the screen of point B, relative to the top left corner ((0,0))
+// color: vector color
+//
+
+void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_final, UINT32 y_final, UINT32 color)
 {
 
+  if(y_init >= GPU.Info->VerticalResolution)
+  {
+    error_printf("Draw_vector error: y_init is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if(y_final >= GPU.Info->VerticalResolution)
+  {
+    error_printf("Draw_vector error: y_final is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if(x_init >= GPU.Info->HorizontalResolution)
+  {
+    error_printf("Draw_vector error: x_init is larger than horizontal resolution.\r\n");
+    return ;
+  }
+  else if(x_final >= GPU.Info->HorizontalResolution)
+  {
+    error_printf("Draw_vector error: x_final is larger than horizontal resolution.\r\n");
+    return ;
+  }
+
+  uint32_t transparency_color = 0xFF000000;
+  if(GPU.Info->PixelFormat == PixelBitMask)
+  {
+    transparency_color = GPU.Info->PixelInformation.ReservedMask;
+  }
+
+  EFI_PHYSICAL_ADDRESS pixel_address_base = GPU.FrameBufferBase + ( (y_init * GPU.Info->PixelsPerScanLine + x_init) * 4 ); // First pixel
+  //EFI_PHYSICAL_ADDRESS pixel_address_end = GPU.FrameBufferBase + ( (y_final * GPU.Info->PixelsPerScanLine + x_final) * 4 ); // Last pixel
+  EFI_PHYSICAL_ADDRESS pixel_address = pixel_address_base;
+
+  uint64_t BytesPerScanline = GPU.Info->PixelsPerScanLine * 4;
+
+  if( !(color & transparency_color) )
+  {
+    if(y_final == y_init) // Horizontal line
+    {
+      if(x_final == x_init) // Dot
+      {
+        // Why...
+        *(UINT32*)pixel_address_base = color;
+      }
+      else if(x_final > x_init) // Right direction
+      {
+        uint64_t x_dist = x_final - x_init;
+
+        for(uint64_t x = 0; x <= x_dist; pixel_address += 4, x++)
+        {
+          *(UINT32*)pixel_address = color;
+        }
+      }
+      else // x_init > x_final, left direction
+      {
+        uint64_t x_dist = x_init - x_final;
+
+        for(uint64_t x = 0; x <= x_dist; pixel_address -= 4, x++)
+        {
+          *(UINT32*)pixel_address = color;
+        }
+      }
+    }
+
+    else if(y_final > y_init) // Down direction
+    {
+      uint64_t y_dist = y_final - y_init;
+
+      if(x_final == x_init) // Vertical line, down direction
+      {
+        for(uint64_t y = 0; y <= y_dist; pixel_address += BytesPerScanline, y++)
+        {
+          *(UINT32*)pixel_address = color;
+        }
+      }
+      else if(x_final > x_init) // Right direction
+      {
+        uint64_t x_dist = x_final - x_init;
+
+        if(y_dist == x_dist) // Straight diagonal, 45 degrees
+        {
+          for(uint64_t y = 0; y <= x_dist; pixel_address += BytesPerScanline + 4, y++) // Comparison is not a mistake
+          {
+            *(UINT32*)pixel_address = color;
+          }
+        }
+        else if(y_dist > x_dist) // Angle < 45 degrees
+        {
+          double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
+          uint64_t this_step = 0;
+          uint64_t prev_step = 0;
+          for(uint64_t y = 1; (y - 1) <= y_dist; pixel_address += BytesPerScanline + 4 * (this_step - prev_step), y++)
+          {
+            *(UINT32*)pixel_address = color;
+            prev_step = this_step;
+            this_step = (uint64_t)(((double)y) * slope_step);
+          }
+        }
+        else // y_dist < x_dist, angle > 45 degrees
+        {
+          double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
+          uint64_t this_step = 0;
+          uint64_t prev_step = 0;
+          for(uint64_t x = 1; (x - 1) <= x_dist; pixel_address += BytesPerScanline * (this_step - prev_step) + 4, x++)
+          {
+            *(UINT32*)pixel_address = color;
+            prev_step = this_step;
+            this_step = (uint64_t)(((double)x) * slope_step);
+          }
+        }
+      }
+      else // x_init > x_final, left direction
+      {
+        uint64_t x_dist = x_init - x_final;
+
+        if(y_dist == x_dist) // Straight diagonal, 45 degrees
+        {
+          for(uint64_t y = 0; y <= x_dist; pixel_address += BytesPerScanline - 4, y++) // Comparison is not a mistake
+          {
+            *(UINT32*)pixel_address = color;
+          }
+        }
+        else if(y_dist > x_dist) // Angle < 45 degrees
+        {
+          double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
+          uint64_t this_step = 0;
+          uint64_t prev_step = 0;
+          for(uint64_t y = 1; (y - 1) <= y_dist; pixel_address += BytesPerScanline - 4 * (this_step - prev_step), y++)
+          {
+            *(UINT32*)pixel_address = color;
+            prev_step = this_step;
+            this_step = (uint64_t)(((double)y) * slope_step);
+          }
+        }
+        else // y_dist < x_dist, angle > 45 degrees
+        {
+          double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
+          uint64_t this_step = 0;
+          uint64_t prev_step = 0;
+          for(uint64_t x = 1; (x - 1) <= x_dist; pixel_address +=  BytesPerScanline * (this_step - prev_step) - 4, x++)
+          {
+            *(UINT32*)pixel_address = color;
+            prev_step = this_step;
+            this_step = (uint64_t)(((double)x) * slope_step);
+          }
+        }
+      }
+    }
+
+    else // y_init > y_final, Up direction
+    {
+      uint64_t y_dist = y_init - y_final;
+
+      if(x_final == x_init) // Vertical line
+      {
+        for(uint64_t y = 0; y <= y_dist; pixel_address -= BytesPerScanline, y++)
+        {
+          *(UINT32*)pixel_address = color;
+        }
+      }
+      else if(x_final > x_init) // Right direction
+      {
+        uint64_t x_dist = x_final - x_init;
+
+        if(y_dist == x_dist) // Straight diagonal, 45 degrees
+        {
+          for(uint64_t y = 0; y <= x_dist; pixel_address -= BytesPerScanline - 4, y++) // Comparison is not a mistake
+          {
+            *(UINT32*)pixel_address = color;
+          }
+        }
+        else if(y_dist > x_dist) // Angle < 45 degrees
+        {
+          double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
+          uint64_t this_step = 0;
+          uint64_t prev_step = 0;
+          for(uint64_t y = 1; (y - 1) <= y_dist; pixel_address -= BytesPerScanline - 4 * (this_step - prev_step), y++)
+          {
+            *(UINT32*)pixel_address = color;
+            prev_step = this_step;
+            this_step = (uint64_t)(((double)y) * slope_step);
+          }
+        }
+        else // y_dist < x_dist, angle > 45 degrees
+        {
+          double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
+          uint64_t this_step = 0;
+          uint64_t prev_step = 0;
+          for(uint64_t x = 1; (x - 1) <= x_dist; pixel_address -= BytesPerScanline * (this_step - prev_step) - 4, x++)
+          {
+            *(UINT32*)pixel_address = color;
+            prev_step = this_step;
+            this_step = (uint64_t)(((double)x) * slope_step);
+          }
+        }
+      }
+      else // x_init > x_final, left direction
+      {
+        uint64_t x_dist = x_init - x_final;
+
+        if(y_dist == x_dist) // Straight diagonal, 45 degrees
+        {
+          for(uint64_t y = 0; y <= x_dist; pixel_address -= BytesPerScanline + 4, y++) // Comparison is not a mistake
+          {
+            *(UINT32*)pixel_address = color;
+          }
+        }
+        else if(y_dist > x_dist) // Angle < 45 degrees
+        {
+          double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
+          uint64_t this_step = 0;
+          uint64_t prev_step = 0;
+          for(uint64_t y = 1; (y - 1) <= y_dist; pixel_address -= BytesPerScanline + 4 * (this_step - prev_step), y++)
+          {
+            *(UINT32*)pixel_address = color;
+            prev_step = this_step;
+            this_step = (uint64_t)(((double)y) * slope_step);
+          }
+        }
+        else // y_dist < x_dist, angle > 45 degrees
+        {
+          double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
+          uint64_t this_step = 0;
+          uint64_t prev_step = 0;
+          for(uint64_t x = 1; (x - 1) <= x_dist; pixel_address -= BytesPerScanline * (this_step - prev_step) + 4, x++)
+          {
+            *(UINT32*)pixel_address = color;
+            prev_step = this_step;
+            this_step = (uint64_t)(((double)x) * slope_step);
+          }
+        }
+      }
+    }
+    // *(UINT32*)pixel_address_end = 0x00ff0000;
+  } // end transparency check
 }
-*/
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_vector_polar: Draw A Vector from A to B in Polar Coordinates
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This function draws a vector from point A to point B, including the end points. Because it's a vector, direction also matters.
+// There is a cartesian-coordinate version of this above.
+//
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x_init and y_init: (x,y) coordinates on the screen of point A, relative to the top left corner ((0,0))
+// r: length of the vector, sign dictates direction
+// theta: angle (in degrees) of the vector, relative to (x_init, y_init) -- think of (x_init, y_init) as defining the origin of the vector's coordinate system
+// color: vector color
+//
+
+void Draw_vector_polar(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 theta, UINT32 color)
+{
+  double sincos_array[2] = {(double)theta, 0}; // Reminder that first member is the input
+  //sincos_array[0] = (double)theta;
+  quick_sincos_deg(sincos_array);
+
+  int64_t x_offset = (int64_t) ((double)r * sincos_array[0]); //cosine
+  int64_t y_offset = (int64_t) ((double)r * sincos_array[1]); // sine
+
+  uint32_t x_final = (uint32_t) ((int64_t)x_init + x_offset);
+  uint32_t y_final = (uint32_t) ((int64_t)y_init - y_offset); // Because (+) is down
+
+//  printf("x_init: %u, y_init: %u, r: %d, theta: %d, x_offset: %lld, y_offset: %lld, x_final: %u, y_final: %u\r\n", x_init, y_init, r, theta, x_offset, y_offset, x_final, y_final);
+  Draw_vector(GPU, x_init, y_init, x_final, y_final, color);
+}
+
+// ARM has a straight up ABS instruction for integer absolute value...
+// This is what GCC -O3 does for (x < 0) ? -x : x...
+static inline int64_t int_abs(int64_t x)
+{
+  int64_t absx;
+
+  asm volatile ("cqto\n\t"
+                "xorq %%rdx, %%rax\n\t"
+                "subq %%rdx, %%rax\n\t"
+              : "=a" (absx)// Outputs
+              : "a" (x) // Inputs
+              : "%rdx" // Clobbers
+              );
+
+  return absx;
+}
+
+// NOTE: Don't use these trig functions for anything important. FSIN and FCOS have accuracy problems:
+// https://randomascii.wordpress.com/2014/10/09/intel-underestimates-error-bounds-by-1-3-quintillion/
+// They are used here simply because they're useful for a quick way to draw things on screen.
+
+//
+// DEGREES
+//
+
+// x in degrees
+static inline double quick_cos_deg(double x)
+{
+  int constant = 180;
+
+  // convert to radians, take cosine
+  asm volatile ("fldpi\n\t" // Load pi into ST0
+                "fldl %[in_out]\n\t" // Load variable into ST0, bump pi to ST1
+                "FMULP\n\t" // Multiply ST1 by ST0, pop stack
+                "FIDIV %[divisor]\n\t" // Divide ST0 by 180
+                "FCOS\n\t" // Take cos of ST0
+                "fstpl %[in_out]\n\t" // store ST0
+               : [in_out] "+m" (x)
+               : [divisor] "m" (constant)
+              );
+
+  return x;
+}
+
+// x in degrees
+static inline double quick_sin_deg(double x)
+{
+  int constant = 180;
+
+  // convert to radians, take sine
+  asm volatile ("fldpi\n\t" // Load pi into ST0
+                "fldl %[in_out]\n\t" // Load variable into ST0, bump pi to ST1
+                "FMULP\n\t" // Multiply ST1 by ST0, pop stack
+                "FIDIV %[divisor]\n\t" // Divide ST0 by 180
+                "FSIN\n\t" // Take sin of ST0
+                "fstpl %[in_out]\n\t" // store ST0
+               : [in_out] "+m" (x)
+               : [divisor] "m" (constant)
+              );
+
+  return x;
+}
+
+// Takes an array of 2 doubles (degrees)
+// Array member two_x[0] needs to have the input angle
+// On output, two_x[0] = cosine, two_x[1] = sine
+static inline double * quick_sincos_deg(double * two_x)
+{
+  int constant = 180;
+
+  // convert to radians, take sine & cosine
+  asm volatile ("fldpi\n\t" // Load pi into ST0
+                "fldl %[in_cosout]\n\t" // Load variable into ST0, bump pi to ST1
+                "FMULP\n\t" // Multiply ST1 by ST0, pop stack
+                "FIDIV %[divisor]\n\t" // Divide ST0 by 180
+                "FSINCOS\n\t" // Take sin & cos of ST0, put sin in ST1 and cos in ST0
+                "fstpl %[in_cosout]\n\t" // store ST0
+                "fstpl %[sinout]\n\t" // store ST1
+               : [in_cosout] "+m" (two_x[0]), [sinout] "=m" (two_x[1])
+               : [divisor] "m" (constant)
+              );
+  return two_x;
+}
+
+//
+// RADIANS
+//
+
+// x in radians
+static inline double quick_cos_rad(double x)
+{
+  // take cosine
+  asm volatile ("fldl %[in_out]\n\t" // Load variable into ST0
+                "FCOS\n\t" // Take cos of ST0
+                "fstpl %[in_out]\n\t" // store ST0
+               : [in_out] "+m" (x)
+               : // No inputs
+              );
+
+  return x;
+}
+
+// x in radians
+static inline double quick_sin_rad(double x)
+{
+  // take sine
+  asm volatile ("fldl %[in_out]\n\t" // Load variable into ST0
+                "FSIN\n\t" // Take sin of ST0
+                "fstpl %[in_out]\n\t" // store ST0
+               : [in_out] "+m" (x)
+               : // No inputs
+              );
+
+  return x;
+}
+
+// Takes an array of 2 doubles (radians)
+// Array member two_x[0] needs to have the input angle
+// On output, two_x[0] = cosine, two_x[1] = sine
+static inline double * quick_sincos_rad(double * two_x)
+{
+  // take sine & cosine
+  asm volatile ("fldl %[in_cosout]\n\t" // Load variable into ST0
+                "FSINCOS\n\t" // Take sin & cos of ST0, put sin in ST1 and cos in ST0
+                "fstpl %[in_cosout]\n\t" // store ST0
+                "fstpl %[sinout]\n\t" // store ST1
+               : [in_cosout] "+m" (two_x[0]), [sinout] "=m" (two_x[1])
+               : // No inputs
+              );
+
+  return two_x;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_arc: Draw An Arc in Polar Coordinates
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This function draws an arc from the given parameters. Direction does matter. This function can be used to draw circles and spirals.
+// There is no cartesian-coordinate version of this. Cartesian is for rectangles, polar is for circles. :)
+//
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x_init and y_init: (x,y) coordinates on the screen of the arc's coordinate system's origin, relative to the top left corner ((0,0))
+// r: length of the radius, sign dictates direction
+// r_diff: increment/decrement r by this amount every r_step, where r_step is some fraction of theta_diff
+// r_step: increment r by r_diff every this many points along the arc. Set this to 0 to disable increment/decrement of r by r_diff. A higher number makes a tighter spiral.
+// theta_init: angle (in degrees) of the source vector radius, relative to (x_init, y_init) -- think of (x_init, y_init) as defining the origin of the arc's coordinate system
+// theta_diff: sweep angle (in degrees), angle determins direction. Note that |theta_diff| == arc length
+// arc_color: arc color
+// fill_color: color to fill in the whole wedge. Make it transparent to disable fill.
+//
+// For those unfamiliar with polar coordinates, this function works like so:
+//
+// Imagine a coordinate system. Draw a line from the origin to a point in the top-right quadrant. That point is the first point of the arc.
+// The line just drawn (length == r) makes an angle with the x-axis. This angle is theta_init.
+//
+//     | / <- r
+// ____|/__)__ <- theta_init
+//     |
+//     |
+//
+// Now draw another line (same length) to a different point. That line also makes an angle with the x-axis.
+// theta_diff is the difference between that angle and theta_init. Note: The |magnitude| of this value is also the arc length, or the number of points in the arc.
+//
+
+// Those weird-looking arcs that can be made in MS Paint or MS Word are actually just a couple different arcs stitched together. It's true of polylines in general.
+void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 r_diff, INT32 r_step, INT32 theta_init, INT32 theta_diff, UINT32 color)
+{
+  if(y_init >= GPU.Info->VerticalResolution)
+  {
+    error_printf("Draw_arc error: y_init is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if(x_init >= GPU.Info->HorizontalResolution)
+  {
+    error_printf("Draw_arc error: x_init is larger than horizontal resolution.\r\n");
+    return ;
+  }
+  else if(r_step >> 31) // 2's comp sign check for negative
+  {
+    error_printf("Draw_arc error: r_step must be >= 0.\r\n");
+    return ;
+  }
+
+  // Calculating any more sophisticated bounds requires precomputing sine and cosine for the longest point in the arc/circle/spiral.
+  // Needless to say, this can take a while. By sticking checks that accomplish the same thing in the for loop and using the
+  // "__builtin_expect()" macro, we can tell the compiler to optimize for a specific branch. Doing this means that, in total, the
+  // conditional branches in the for loop take up many fewer instructions since the compiler ccan reasonably expect what will happen.
+  // In this case, using __builtin_expect makes the conditional branch sanity checks take about 2-3 cycles max after micro-op fusion.
+  // Looking at the asm output, GCC appears to be plenty smart enough to figure out the branch probabilities itself, but in this specific
+  // case it doesn't hurt to be explicit in case something ever changes in the future. In any event, I'll pay the 2-3 cycles to prevent major
+  // overflow and memory corruption problems, especially when the loop at best is already in the ~50-100 cycle range per iteration.
+
+  uint32_t transparency_color = 0xFF000000;
+  if(GPU.Info->PixelFormat == PixelBitMask)
+  {
+    transparency_color = GPU.Info->PixelInformation.ReservedMask;
+  }
+
+  // You know what?
+  // I think this is actually faster than doing an iterative method that involves conditional branches inside for loops.
+  // The error checks at the end before printing should not be a problem.
+  if( !(color & transparency_color) )
+  {
+    double sincos_array[2] = {180, 0}; // Reminder that first member is the input
+
+    if(theta_diff >> 31) // 2's comp sign check for negative, clockwise sweep direction
+    {
+      if(r_step)
+      {
+        int32_t this_r_step = 0;
+        int32_t prev_r_step = 0;
+        double r_div = ((double)r_diff) / ((double)r_step);
+
+        for(int32_t theta_iter = 0; theta_iter >= theta_diff; r += (this_r_step - prev_r_step), theta_iter--)
+        {
+          sincos_array[0] = (double)(theta_init + theta_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final = (uint32_t) ((int64_t)x_init + x_offset);
+          uint32_t y_final = (uint32_t) ((int64_t)y_init - y_offset); // Because (+) is down
+
+          if(__builtin_expect(y_final >= GPU.Info->VerticalResolution, 0))
+          {
+            error_printf("Draw_arc error: y_final is larger than vertical resolution.\r\n");
+            return ;
+          }
+          else if(__builtin_expect(x_final >= GPU.Info->HorizontalResolution, 0))
+          {
+            error_printf("Draw_arc error: x_final is larger than horizontal resolution.\r\n");
+            return ;
+          }
+
+          *(UINT32*)(GPU.FrameBufferBase + (y_final * GPU.Info->PixelsPerScanLine + x_final) * 4) = color;
+
+          prev_r_step = this_r_step;
+          this_r_step = (int32_t)(r_div * ((double)(-theta_iter)));
+        }
+      }
+      else
+      {
+
+        for(int32_t theta_iter = 0; theta_iter >= theta_diff; theta_iter--)
+        {
+          sincos_array[0] = (double)(theta_init + theta_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final = (uint32_t) ((int64_t)x_init + x_offset);
+          uint32_t y_final = (uint32_t) ((int64_t)y_init - y_offset); // Because (+) is down
+
+          if(__builtin_expect(y_final >= GPU.Info->VerticalResolution, 0))
+          {
+            error_printf("Draw_arc error: y_final is larger than vertical resolution.\r\n");
+            return ;
+          }
+          else if(__builtin_expect(x_final >= GPU.Info->HorizontalResolution, 0))
+          {
+            error_printf("Draw_arc error: x_final is larger than horizontal resolution.\r\n");
+            return ;
+          }
+
+          *(UINT32*)(GPU.FrameBufferBase + (y_final * GPU.Info->PixelsPerScanLine + x_final) * 4) = color;
+        }
+      }
+    }
+    else // positive, counterclockwise sweep direction
+    {
+      if(r_step)
+      {
+        int32_t this_r_step = 0;
+        int32_t prev_r_step = 0;
+        double r_div = ((double)r_diff) / ((double)r_step);
+
+        for(int32_t theta_iter = 0; theta_iter <= theta_diff; r += (this_r_step - prev_r_step), theta_iter++)
+        {
+          sincos_array[0] = (double)(theta_init + theta_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final = (uint32_t) ((int64_t)x_init + x_offset);
+          uint32_t y_final = (uint32_t) ((int64_t)y_init - y_offset); // Because (+) is down
+
+          if(__builtin_expect(y_final >= GPU.Info->VerticalResolution, 0))
+          {
+            error_printf("Draw_arc error: y_final is larger than vertical resolution.\r\n");
+            return ;
+          }
+          else if(__builtin_expect(x_final >= GPU.Info->HorizontalResolution, 0))
+          {
+            error_printf("Draw_arc error: x_final is larger than horizontal resolution.\r\n");
+            return ;
+          }
+
+          *(UINT32*)(GPU.FrameBufferBase + (y_final * GPU.Info->PixelsPerScanLine + x_final) * 4) = color;
+
+          prev_r_step = this_r_step;
+          this_r_step = (int32_t)(r_div * ((double)theta_iter));
+          // This is faster than using % or /.
+        }
+      }
+      else
+      {
+
+        for(int32_t theta_iter = 0; theta_iter <= theta_diff; theta_iter++)
+        {
+          sincos_array[0] = (double)(theta_init + theta_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final = (uint32_t) ((int64_t)x_init + x_offset);
+          uint32_t y_final = (uint32_t) ((int64_t)y_init - y_offset); // Because (+) is down
+
+          if(__builtin_expect(y_final >= GPU.Info->VerticalResolution, 0))
+          {
+            error_printf("Draw_arc error: y_final is larger than vertical resolution.\r\n");
+            return ;
+          }
+          else if(__builtin_expect(x_final >= GPU.Info->HorizontalResolution, 0))
+          {
+            error_printf("Draw_arc error: x_final is larger than horizontal resolution.\r\n");
+            return ;
+          }
+
+          *(UINT32*)(GPU.FrameBufferBase + (y_final * GPU.Info->PixelsPerScanLine + x_final) * 4) = color;
+        }
+      }
+    }
+
+  } // end transparency check
+}
+
+// To fill arc, compute first and last points, draw cartesian vector between them. Do this parallel iter for each point.
+// For spirals with varying r, just draw vector to every point from origin
+// By the way, arc length should be calculated L = r*theta (in rads)...
+// TODO
+void Draw_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 x_length, INT32 y_length, UINT32 color)
+{
+  // Draw vector has length checks in it already.
+
+  uint32_t x_final = (uint32_t)((int64_t)x_init + (int64_t)x_length);
+  uint32_t y_final = (uint32_t)((int64_t)y_init + (int64_t)y_length);
+
+  Draw_vector(GPU, x_init, y_init, x_final, y_init, color);
+  Draw_vector(GPU, x_final, y_init, x_final, y_final, color);
+  Draw_vector(GPU, x_final, y_final, x_init, y_final, color);
+  Draw_vector(GPU, x_init, y_final, x_init, y_init, color);
+}
+
+void Draw_filled_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_length, UINT32 y_length, UINT32 color)
+{
+  if((y_init + y_length) > GPU.Info->VerticalResolution)
+  {
+    error_printf("Draw_filled_rectangle error: (y_init + y_length) is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if((x_init + x_length) > GPU.Info->HorizontalResolution)
+  {
+    error_printf("Draw_filled_rectangle error: (x_init + x_length) is larger than horizontal resolution.\r\n");
+    return ;
+  }
+
+  EFI_PHYSICAL_ADDRESS corner_address = GPU.FrameBufferBase + (y_init * GPU.Info->PixelsPerScanLine + x_init) * 4;
+  uint64_t BytesPerScanline = GPU.Info->PixelsPerScanLine * 4;
+
+  for(uint32_t y = 0; y <= y_length; y++) // Include initial point
+  {
+    AVX_memset_4B((void*)(corner_address + y*BytesPerScanline), color, x_length + 1); // Include initial point
+    /*
+    for(uint32_t x = 0; x <= x_length; x++) // Include initial point
+    {
+      *(UINT32*)(corner_address + y*BytesPerScanline + x * 4) = color;
+    }
+    */
+  }
+}
 
 //----------------------------------------------------------------------------------------------------------------------------------
 // bitmap_bitswap: Swap Bitmap Bits
@@ -1192,7 +1810,7 @@ void Output_render_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, 
 // height and width: height (bytes) and width (bits) of the bitmap; there is no automatic way of getting this information for weird font sizes (e.g. 17 bits wide), sorry.
 //
 
-void bitmap_bitswap(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output)
+void bitmap_bitswap(const unsigned char * bitmap, UINT32 width, UINT32 height, unsigned char * output)
 {
   uint32_t row_iterator = width >> 3;
   if((width & 0x7) != 0)
@@ -1218,7 +1836,7 @@ void bitmap_bitswap(const unsigned char * bitmap, UINT32 height, UINT32 width, u
 // height and width: height (bytes) and width (bits) of the bitmap; there is no automatic way of getting this information for weird font sizes (e.g. 17 bits wide), sorry.
 //
 
-void bitmap_bitreverse(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output)
+void bitmap_bitreverse(const unsigned char * bitmap, UINT32 width, UINT32 height, unsigned char * output)
 {
   uint32_t row_iterator = width >> 3;
   if((width & 0x7) != 0)
@@ -1250,7 +1868,7 @@ void bitmap_bitreverse(const unsigned char * bitmap, UINT32 height, UINT32 width
 // height and width: height (bytes) and width (bits) of the bitmap; there is no automatic way of getting this information for weird font sizes (e.g. 17 bits wide), sorry.
 //
 
-void bitmap_bytemirror(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output) // Width in bits, height in bytes
+void bitmap_bytemirror(const unsigned char * bitmap, UINT32 width, UINT32 height, unsigned char * output) // Width in bits, height in bytes
 {
   uint32_t row_iterator = width >> 3;
   if((width & 0x7) != 0)

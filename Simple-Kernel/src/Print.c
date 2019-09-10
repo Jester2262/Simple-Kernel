@@ -794,7 +794,7 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 		case '\t': // Tab
 			for(int tabspaces = 0; tabspaces < 8; tabspaces++) // Just do the default output actions 8 times with a space character. Tab stops are 8 characters across.
 			{ // But why not just do arg->index += 8? Because then the highlight won't propagate.
-				Output_render_text(arg->defaultGPU, ' ', arg->height, arg->width, arg->font_color, arg->highlight_color, arg->x, arg->y, arg->xscale, arg->yscale, arg->index);
+				Output_render_text(arg->defaultGPU, ' ', arg->width, arg->height, arg->font_color, arg->highlight_color, arg->x, arg->y, arg->xscale, arg->yscale, arg->index);
 				arg->index++; // Increment global character index
 
 				if(arg->index * arg->width * arg->xscale > (arg->defaultGPU.Info->HorizontalResolution - arg->width * arg->xscale)) // Check if text is running off screen
@@ -862,7 +862,7 @@ static void printf_putchar(int output_character, void *arglist) // Character is 
 			}
 			break;
 		default:
-			Output_render_text(arg->defaultGPU, output_character, arg->height, arg->width, arg->font_color, arg->highlight_color, arg->x, arg->y, arg->xscale, arg->yscale, arg->index);
+			Output_render_text(arg->defaultGPU, output_character, arg->width, arg->height, arg->font_color, arg->highlight_color, arg->x, arg->y, arg->xscale, arg->yscale, arg->index);
 			arg->index++; // Increment global character index
 
 			if(arg->index * arg->width * arg->xscale > (arg->defaultGPU.Info->HorizontalResolution - arg->width * arg->xscale)) // Check if text is running off screen
@@ -1041,7 +1041,6 @@ int color_printf(uint32_t fontcolor, uint32_t highlightcolor, const char *fmt, .
 
 	va_start(ap, fmt);
 	retval = kvprintf(fmt, printf_putchar, &Global_Print_Info, 10, ap); // The third argument is any arguments to be passed to putchar (e.g. &pca - putchar args)
-// retval = kvprintf(fmt, printf_putchar, NULL, 10, ap); // This could work, too (requires using similarly commented code in printf_putchar... Which would be somewhat of a hassle at this point. All those arg->whatever would need to be changed, too!!)
 	va_end(ap);
 
 	Global_Print_Info.font_color = prev_font_color;
@@ -1075,7 +1074,6 @@ int error_printf(const char *fmt, ...)
 
 	va_start(ap, fmt);
 	retval = kvprintf(fmt, printf_putchar, &Global_Print_Info, 10, ap); // The third argument is any arguments to be passed to putchar (e.g. &pca - putchar args)
-// retval = kvprintf(fmt, printf_putchar, NULL, 10, ap); // This could work, too (requires using similarly commented code in printf_putchar... Which would be somewhat of a hassle at this point. All those arg->whatever would need to be changed, too!!)
 	va_end(ap);
 
 	Global_Print_Info.font_color = prev_font_color;
@@ -1109,7 +1107,40 @@ int warning_printf(const char *fmt, ...)
 
 	va_start(ap, fmt);
 	retval = kvprintf(fmt, printf_putchar, &Global_Print_Info, 10, ap); // The third argument is any arguments to be passed to putchar (e.g. &pca - putchar args)
-// retval = kvprintf(fmt, printf_putchar, NULL, 10, ap); // This could work, too (requires using similarly commented code in printf_putchar... Which would be somewhat of a hassle at this point. All those arg->whatever would need to be changed, too!!)
+	va_end(ap);
+
+	Global_Print_Info.font_color = prev_font_color;
+	Global_Print_Info.highlight_color = prev_highlight_color;
+
+	return (retval);
+}
+
+// printf for notes (cyan text on black highlight)
+// if a message needs to stand out and isn't an error or warning, use this.
+int info_printf(const char *fmt, ...)
+{
+	uint32_t prev_font_color = Global_Print_Info.font_color;
+	uint32_t prev_highlight_color = Global_Print_Info.highlight_color;
+	va_list ap;
+	int retval;
+
+	if(Global_Print_Info.defaultGPU.Info->PixelFormat == PixelBlueGreenRedReserved8BitPerColor)
+	{
+		Global_Print_Info.font_color = 0x0000FFFF;
+	}
+	else if(Global_Print_Info.defaultGPU.Info->PixelFormat == PixelRedGreenBlueReserved8BitPerColor)
+	{
+		Global_Print_Info.font_color = 0x00FFFF00;
+	}
+	else if(Global_Print_Info.defaultGPU.Info->PixelFormat == PixelBitMask)
+	{
+		Global_Print_Info.font_color = Global_Print_Info.defaultGPU.Info->PixelInformation.GreenMask | Global_Print_Info.defaultGPU.Info->PixelInformation.BlueMask;
+	}
+	// No else
+	Global_Print_Info.highlight_color = 0x00000000;
+
+	va_start(ap, fmt);
+	retval = kvprintf(fmt, printf_putchar, &Global_Print_Info, 10, ap); // The third argument is any arguments to be passed to putchar (e.g. &pca - putchar args)
 	va_end(ap);
 
 	Global_Print_Info.font_color = prev_font_color;

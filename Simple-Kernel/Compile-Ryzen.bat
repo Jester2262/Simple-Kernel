@@ -3,7 +3,7 @@
 rem
 rem =================================
 rem
-rem VERSION 1.06
+rem VERSION 1.1
 rem
 rem GCC (MinGW-w64) Kernel64 Windows Compile Script
 rem
@@ -110,15 +110,16 @@ rem Loop through and compile the backend .c files, which are listed in c_files_w
 rem
 
 @echo %echo_stat%
-FOR /F "tokens=*" %%f IN ('type "%CurDir%\c_files_windows.txt"') DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -ffreestanding -march=znver1 -mavx2 -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args --std=gnu11 -I!HFILES! -Og -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%%~df%%~pf%%~nf.out" -MF"%%~df%%~pf%%~nf.d" -MT"%%~df%%~pf%%~nf.o" -o "%%~df%%~pf%%~nf.o" "%%~ff"
+FOR /F "tokens=*" %%f IN ('type "%CurDir%\c_files_windows.txt"') DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -ffreestanding -march=znver1 -mavx2 -Og -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args --std=gnu11 -I!HFILES! -g3 -Wall -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%%~df%%~pf%%~nf.out" -MF"%%~df%%~pf%%~nf.d" -MT"%%~df%%~pf%%~nf.o" -o "%%~df%%~pf%%~nf.o" "%%~ff"
 @echo off
 
 rem
 rem Compile the .c files in the startup folder (if any exist)
 rem
 
+rem Using -march=znver1 here causes General Protection Faults on MinGW-w64 using GCC 8.1. It specifically appears to break AVX_memset() in some way related to alignment.
 @echo %echo_stat%
-FOR %%f IN ("%CurDir2%/startup/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -ffreestanding -march=znver1 -mavx2 -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args --std=gnu11 -I!HFILES! -O3 -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.c"
+FOR %%f IN ("%CurDir2%/startup/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -ffreestanding -mavx2 -O3 -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.c"
 @echo off
 
 rem
@@ -127,7 +128,7 @@ rem initialize the system)
 rem
 
 @echo %echo_stat%
-FOR %%f IN ("%CurDir2%/startup/*.S") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -ffreestanding -march=znver1 -mavx2 -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args --std=gnu11 -I!HFILES! -Og -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.S"
+FOR %%f IN ("%CurDir2%/startup/*.S") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -ffreestanding -march=znver1 -mavx2 -Og -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.S"
 @echo off
 
 rem
@@ -135,7 +136,7 @@ rem Compile user .c files
 rem
 
 @echo %echo_stat%
-FOR %%f IN ("%CurDir2%/src/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -ffreestanding -march=znver1 -mavx2 -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args --std=gnu11 -I!HFILES! -Og -g3 -Wall -Wextra -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/src/%%~nf.out" -MF"%CurDir2%/src/%%~nf.d" -MT"%CurDir2%/src/%%~nf.o" -o "%CurDir2%/src/%%~nf.o" "%CurDir2%/src/%%~nf.c"
+FOR %%f IN ("%CurDir2%/src/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -ffreestanding -march=znver1 -mavx2 -Og -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/src/%%~nf.out" -MF"%CurDir2%/src/%%~nf.d" -MT"%CurDir2%/src/%%~nf.o" -o "%CurDir2%/src/%%~nf.o" "%CurDir2%/src/%%~nf.c"
 @echo off
 
 rem
@@ -167,12 +168,12 @@ FOR %%f IN ("%CurDir2%/src/*.o") DO echo "%CurDir3%/src/%%~nxf" >> objects.list
 rem
 rem Link the object files using all the objects in objects.list and an optional
 rem linker script (it would go in the Backend/Linker directory) to generate the
-rem output binary, which is called "Kernel64.exe"
+rem output binary, which is called "Kernel64-Ryzen.exe"
 rem
 rem NOTE: Linkerscripts may be needed for bigger projects
 rem
 
-rem MinGW-w64 has a pretty serious issue where it strips relocation tables by default for PE images by default. Using -Wl,--dynamicbase,--export-all-symbols prevents it from doing so.
+rem MinGW-w64 has a pretty serious issue where it strips relocation tables for PE images by default. Using -Wl,--dynamicbase,--export-all-symbols prevents it from doing so.
 rem This is also needed for ASLR compatibility, as ASLR and kernel loading are basically the same...
 rem This is why many UEFI build systems using MinGW-w64 pass -Wl,-dll to the linker, since DLLs are by definition relocatable and thus need to keep the reloc table.
 rem
@@ -182,9 +183,9 @@ rem https://insights.sei.cmu.edu/cert/2018/08/when-aslr-is-not-really-aslr---the
 rem https://sourceware.org/bugzilla/show_bug.cgi?id=19011
 rem https://sourceforge.net/p/mingw-w64/mailman/message/31034877/
 
-rem "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -s -T%LinkerScript% -nostdlib -Wl,-e,kernel_main -Wl,--dynamicbase,--export-all-symbols -Wl,--subsystem,10 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64.exe" @"objects.list"
+rem "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -s -T%LinkerScript% -nostdlib -Wl,-e,kernel_main -Wl,--dynamicbase,--export-all-symbols -Wl,--subsystem,10 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64-Ryzen.exe" @"objects.list"
 @echo on
-"%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -s -nostdlib -Wl,-e,kernel_main -Wl,--dynamicbase,--export-all-symbols -Wl,--subsystem,10 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64.exe" @"objects.list"
+"%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -s -nostdlib -Wl,-e,kernel_main -Wl,--dynamicbase,--export-all-symbols -Wl,--subsystem,10 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64-Ryzen.exe" @"objects.list"
 @echo off
 rem Remove -s in the above command to keep debug symbols in the output binary.
 
@@ -196,7 +197,7 @@ echo.
 echo Generating binary and Printing size information:
 echo.
 rem "%GCC_FOLDER_NAME%\bin\objcopy.exe" -O binary "program.exe" "program.bin"
-"%GCC_FOLDER_NAME%\bin\size.exe" "Kernel64.exe"
+"%GCC_FOLDER_NAME%\bin\size.exe" "Kernel64-Ryzen.exe"
 echo.
 
 set /P UPL="Cleanup, recompile, or done? [c for cleanup, r for recompile, any other key for done] "

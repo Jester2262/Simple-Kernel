@@ -33,7 +33,7 @@ static void set_BP_interrupt_entry(uint64_t isr_num, uint64_t isr_addr);
 // Initial setup after UEFI handoff
 //
 
-void System_Init(LOADER_PARAMS * LP)
+__attribute__((target("no-sse"))) void System_Init(LOADER_PARAMS * LP)
 {
   // This memory initialization stuff needs to go first.
   Global_Memory_Info.MemMap = LP->Memory_Map;
@@ -43,7 +43,8 @@ void System_Init(LOADER_PARAMS * LP)
   // Apparently some systems won't totally leave you be without setting a virtual address map (https://www.spinics.net/lists/linux-efi/msg14108.html
   // and https://mjg59.dreamwidth.org/3244.html). Well, fine; identity map it now and fuhgetaboutit.
   // This will modify the memory map (but not its size), and set Global_Memory_Info.MemMap.
-  if(Set_Identity_VMAP(LP->RTServices) == NULL)
+
+  if((EFI_PHYSICAL_ADDRESS)Set_Identity_VMAP(LP->RTServices) == ~0ULL) // Check for failure
   {
     Global_Memory_Info.MemMap = LP->Memory_Map; // No virtual addressing possible, evidently. Reset the map to how it was before.
   }
@@ -52,10 +53,10 @@ void System_Init(LOADER_PARAMS * LP)
   // This function call is required to initialize printf. Set default GPU as GPU 0.
   // It can also be used to reset all global printf values and reassign a new default GPU at any time.
   Initialize_Global_Printf_Defaults(LP->GPU_Configs->GPUArray[0]);
-  // Technically, printf is immediately usable now. I'd recommend waitng for AVX/SSE init just in case the compiler uses them when optimizing printf.
+  // Technically, printf is immediately usable now, as long as no scrolling, which uses AVX, is needed
 
   Enable_AVX(); // ENABLING AVX ASAP
-  // All good now.
+  // All good now. Printf to your heart's content.
 
   // I know this CR0.NE bit isn't always set by default. Set it.
   // Generate and handle exceptions in the modern way, per Intel SDM
@@ -67,7 +68,7 @@ void System_Init(LOADER_PARAMS * LP)
     cr0_2 = control_register_rw(0, 0, 0);
     if(cr0_2 == cr0)
     {
-      printf("Error setting CR0.NE bit.\r\n");
+      warning_printf("Error setting CR0.NE bit.\r\n");
     }
   }
   // Same with CR4.OSXMMEXCPT for SIMD errors
@@ -79,28 +80,34 @@ void System_Init(LOADER_PARAMS * LP)
     cr4_2 = control_register_rw(4, 0, 0);
     if(cr4_2 == cr4)
     {
-      printf("Error setting CR4.OSXMMEXCEPT bit.\r\n");
+      warning_printf("Error setting CR4.OSXMMEXCEPT bit.\r\n");
     }
   }
 
   // Make a replacement GDT since the UEFI one is in EFI Boot Services Memory.
   // Don't need anything fancy, just need one to exist somewhere (preferably in EfiLoaderData, which won't change with this software)
   Setup_MinimalGDT();
+  printf("GDT set.\r\n");
 
   // Set up IDT for interrupts
   Setup_IDT();
+  printf("IDT set.\r\n");
 
   // Set up the memory map for use with mallocX (X = 16, 32, 64)
   Setup_MemMap();
+  printf("MemMap set.\r\n");
 
   // Set up paging structures (requires memory map to be set up)
   Setup_Paging();
+  printf("Paging set.\r\n");
 
   // Reclaim Efi Boot Services memory now that GDT, IDT, and Paging have been set up
   ReclaimEfiBootServicesMemory();
+  printf("EfiBootServices Memory reclaimed.\r\n");
 
   // Ditto for EfiLoaderCode, which is just where the bootloader was
   ReclaimEfiLoaderCodeMemory();
+  printf("EfiLoaderCode Memory reclaimed.\r\n");
 
   // HWP
   Enable_HWP();
@@ -139,7 +146,7 @@ uint64_t get_tick(void)
 // AVX_memcmp
 //
 
-void Enable_AVX(void)
+__attribute__((target("no-sse"))) void Enable_AVX(void)
 {
   // Checking CPUID means determining if bit 21 of R/EFLAGS can be toggled
   uint64_t rflags = control_register_rw('f', 0, 0);
@@ -149,7 +156,8 @@ void Enable_AVX(void)
   rflags2 = control_register_rw('f', 0, 0);
   if(rflags2 == rflags)
   {
-    printf("CPUID is not supported.\r\n");
+    error_printf("CPUID is not supported.\r\n");
+    HaCF();
   }
   else
   {
@@ -199,7 +207,8 @@ void Enable_AVX(void)
             }
             else
             {
-              printf("Unable to set AVX512.\r\n");
+              error_printf("Unable to set AVX512.\r\n");
+              HaCF();
             }
             printf("Checking other supported AVX512 features:\r\n");
             if(rbx & (1 << 17))
@@ -264,7 +273,7 @@ void Enable_AVX(void)
           {
             Colorscreen(Global_Print_Info.defaultGPU, Global_Print_Info.background_color); // We can use SSE/AVX-optimized functions now! But not AVX512 ones.
             printf("AVX/AVX2 enabled.\r\n");
-            printf("AVX512 not supported.\r\n");
+            info_printf("AVX512 not supported.\r\n");
           }
           // End AVX512 check
 
@@ -274,18 +283,19 @@ void Enable_AVX(void)
           }
           else
           {
-            printf("AVX2 not supported.\r\n");
+            info_printf("AVX2 not supported.\r\n");
           }
           // Only have AVX to work with, then.
         }
         else
         {
-          printf("Unable to set AVX.\r\n");
+          error_printf("Unable to set AVX.\r\n");
+          HaCF();
         }
       }
       else
       {
-        printf("AVX not supported. Checking for latest SSE features:\r\n");
+        error_printf("AVX not supported. Checking for latest SSE features:\r\n");
         if(rcx & (1 << 20))
         {
           printf("Up to SSE4.2 supported.\r\n");
@@ -371,7 +381,8 @@ void Enable_AVX(void)
                 }
                 else
                 {
-                  printf("Unable to set AVX512.\r\n");
+                  error_printf("Unable to set AVX512.\r\n");
+                  HaCF();
                 }
                 printf("Checking other supported AVX512 features:\r\n");
                 if(rbx & (1 << 17))
@@ -436,7 +447,7 @@ void Enable_AVX(void)
               {
                 Colorscreen(Global_Print_Info.defaultGPU, Global_Print_Info.background_color); // We can use SSE/AVX-optimized functions now! Just not AVX512 ones.
                 printf("AVX/AVX2 enabled.\r\n");
-                printf("AVX512 not supported.\r\n");
+                info_printf("AVX512 not supported.\r\n");
               }
               // End AVX512 check
 
@@ -446,18 +457,19 @@ void Enable_AVX(void)
               }
               else
               {
-                printf("AVX2 not supported.\r\n");
+                info_printf("AVX2 not supported.\r\n");
               }
               // Only have AVX to work with, then.
             }
             else
             {
-              printf("Unable to set AVX.\r\n");
+              error_printf("Unable to set AVX.\r\n");
+              HaCF();
             }
           }
           else
           {
-            printf("AVX not supported. Checking for latest SSE features:\r\n");
+            error_printf("AVX not supported. Checking for latest SSE features:\r\n");
             if(rcx & (1 << 20))
             {
               printf("Up to SSE4.2 supported.\r\n");
@@ -498,12 +510,14 @@ void Enable_AVX(void)
         }
         else
         {
-          printf("Unable to set OSXSAVE in CR4.\r\n");
+          error_printf("Unable to set OSXSAVE in CR4.\r\n");
+          HaCF();
         }
       }
       else
       {
-        printf("AVX: XSAVE not supported.\r\n");
+        error_printf("AVX: XSAVE not supported.\r\n");
+        HaCF();
       }
     }
   }
@@ -523,7 +537,7 @@ void Enable_Maskable_Interrupts(void)
   if(rflags & (1 << 9))
   {
     // Interrupts are already enabled, do nothing.
-    printf("Interrupts are already enabled.\r\n");
+    info_printf("Interrupts are already enabled.\r\n");
   }
   else
   {
@@ -533,7 +547,7 @@ void Enable_Maskable_Interrupts(void)
     rflags2 = control_register_rw('f', 0, 0);
     if(rflags2 == rflags)
     {
-      printf("Unable to enable maskable interrupts.\r\n");
+      warning_printf("Unable to enable maskable interrupts.\r\n");
     }
     else
     {
@@ -566,7 +580,7 @@ void Enable_HWP(void)
   {
     if(msr_rw(0x770, 0, 0) & 1)
     {
-      printf("HWP is already enabled.\r\n");
+      info_printf("HWP is already enabled.\r\n");
     }
     else
     {
@@ -577,13 +591,13 @@ void Enable_HWP(void)
       }
       else
       {
-        printf("Unable to set HWP.\r\n");
+        warning_printf("Unable to set HWP.\r\n");
       }
     }
   }
   else
   {
-    printf("HWP not supported.\r\n");
+    info_printf("HWP not supported.\r\n");
   }
 }
 
@@ -631,7 +645,7 @@ uint8_t read_perfs_initial(uint64_t * perfs)
   // Check for hypervisor
   if(Hypervisor_check())
   {
-    printf("Hypervisor detected. It's not safe to read CPU frequency MSRs. Returning 0...\r\n");
+    warning_printf("Hypervisor detected. It's not safe to read CPU frequency MSRs. Returning 0...\r\n");
     return 0;
   }
   // OK, not in a hypervisor; continuing...
@@ -644,18 +658,18 @@ uint8_t read_perfs_initial(uint64_t * perfs)
   rflags2 = control_register_rw('f', 0, 0);
   if(rflags2 == rflags)
   {
-    printf("read_perfs_initial: Unable to disable interrupts (maybe they are already disabled?). Results may be skewed.\r\n");
+    warning_printf("read_perfs_initial: Unable to disable maskable interrupts (maybe they are already disabled?). Results may be skewed.\r\n");
   }
   // Now we can safely continue without something like keyboard input messing up tests
 
   uint64_t turbocheck = msr_rw(0x1A0, 0, 0);
   if(turbocheck & (1 << 16))
   {
-    printf("NOTE: Enhanced SpeedStep is enabled.\r\n");
+    info_printf("NOTE: Enhanced SpeedStep is enabled.\r\n");
   }
   if((turbocheck & (1ULL << 38)) == 0)
   {
-    printf("NOTE: Turbo Boost is enabled.\r\n");
+    info_printf("NOTE: Turbo Boost is enabled.\r\n");
   }
 
   asm volatile("cpuid"
@@ -668,7 +682,7 @@ uint8_t read_perfs_initial(uint64_t * perfs)
   {
     if(msr_rw(0x770, 0, 0) & 1)
     {
-      printf("NOTE: HWP is enabled.\r\n");
+      info_printf("NOTE: HWP is enabled.\r\n");
     }
   }
 
@@ -726,7 +740,7 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
     // Check for hypervisor
     if(Hypervisor_check())
     {
-      printf("Hypervisor detected. It's not safe to read CPU frequency MSRs. Returning 0...\r\n");
+      warning_printf("Hypervisor detected. It's not safe to read CPU frequency MSRs. Returning 0...\r\n");
       return 0;
     }
     // OK, not in a hypervisor; continuing...
@@ -739,18 +753,18 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
     rflags2 = control_register_rw('f', 0, 0);
     if(rflags2 == rflags)
     {
-      printf("get_CPU_freq: Unable to disable interrupts (maybe they are already disabled?). Results may be skewed.\r\n");
+      warning_printf("get_CPU_freq: Unable to disable interrupts (maybe they are already disabled?). Results may be skewed.\r\n");
     }
     // Now we can safely continue without something like keyboard input messing up tests
 
     uint64_t turbocheck = msr_rw(0x1A0, 0, 0);
     if(turbocheck & (1 << 16))
     {
-      printf("NOTE: Enhanced SpeedStep is enabled.\r\n");
+      info_printf("NOTE: Enhanced SpeedStep is enabled.\r\n");
     }
     if((turbocheck & (1ULL << 38)) == 0)
     {
-      printf("NOTE: Turbo Boost is enabled.\r\n");
+      info_printf("NOTE: Turbo Boost is enabled.\r\n");
     }
 
     asm volatile("cpuid"
@@ -763,7 +777,7 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
     {
       if(msr_rw(0x770, 0, 0) & 1)
       {
-        printf("NOTE: HWP is enabled.\r\n");
+        info_printf("NOTE: HWP is enabled.\r\n");
       }
     }
 
@@ -851,7 +865,7 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
   rflags2 = control_register_rw('f', 0, 0);
   if(rflags2 == rflags)
   {
-    printf("get_CPU_freq: Unable to re-enable interrupts.\r\n");
+    warning_printf("get_CPU_freq: Unable to re-enable maskable interrupts.\r\n");
   }
 
   return frequency;
@@ -930,7 +944,7 @@ uint32_t portio_rw(uint16_t port_address, uint32_t data, uint8_t size, uint8_t r
   }
   else
   {
-    printf("Invalid port i/o size.\r\n");
+    error_printf("Invalid port i/o size.\r\n");
   }
 
   return data;
@@ -1388,13 +1402,13 @@ void set_tsr(uint16_t tsr_data)
 //
 
 // This is the whole GDT. See the commented code in Setup_MinimalGDT() for specific details.
-__attribute__((aligned(64))) static uint64_t MinimalGDT[5] = {0, 0x00af9a000000ffff, 0x00cf92000000ffff, 0x0080890000000067, 0};
-__attribute__((aligned(64))) static TSS64_STRUCT tss64 = {0}; // This is static, so this structure can only be read by functions defined in this .c file
+__attribute__((aligned(64))) static volatile uint64_t MinimalGDT[5] = {0, 0x00af9a000000ffff, 0x00cf92000000ffff, 0x0080890000000067, 0}; // TSS is a double-sized entry, so it uses the 4th and 5th slots here
+__attribute__((aligned(64))) static volatile TSS64_STRUCT tss64 = {0}; // This is static, so this structure can only be read by functions defined in this .c file
 
 void Setup_MinimalGDT(void)
 {
   DT_STRUCT gdt_reg_data = {0};
-  uint64_t tss64_addr = (uint64_t)&tss64;
+  uint64_t tss64_addr = (uint64_t)(&tss64);
 
   uint16_t tss64_base1 = (uint16_t)tss64_addr;
   uint8_t  tss64_base2 = (uint8_t)(tss64_addr >> 16);
@@ -1441,13 +1455,22 @@ void Setup_MinimalGDT(void)
   ((uint64_t*)MinimalGDT)[4] = (uint64_t)tss64_base4; // TSS is a double-sized entry
 */
   // The only non-constant in the GDT is the base address of the TSS struct. So let's add it in.
-  ( (TSS_LDT_ENTRY_STRUCT*) &((GDT_ENTRY_STRUCT*)MinimalGDT)[3] )->BaseAddress1 = tss64_base1;
-  ( (TSS_LDT_ENTRY_STRUCT*) &((GDT_ENTRY_STRUCT*)MinimalGDT)[3] )->BaseAddress2 = tss64_base2;
-  ( (TSS_LDT_ENTRY_STRUCT*) &((GDT_ENTRY_STRUCT*)MinimalGDT)[3] )->BaseAddress3 = tss64_base3;
-  ( (TSS_LDT_ENTRY_STRUCT*) &((GDT_ENTRY_STRUCT*)MinimalGDT)[3] )->BaseAddress4 = tss64_base4; // TSS is a double-sized entry
+  ( (TSS_LDT_ENTRY_STRUCT*) (&((GDT_ENTRY_STRUCT*)MinimalGDT)[3]) )->BaseAddress1 = tss64_base1;
+  ( (TSS_LDT_ENTRY_STRUCT*) (&((GDT_ENTRY_STRUCT*)MinimalGDT)[3]) )->BaseAddress2 = tss64_base2;
+  ( (TSS_LDT_ENTRY_STRUCT*) (&((GDT_ENTRY_STRUCT*)MinimalGDT)[3]) )->BaseAddress3 = tss64_base3;
+  ( (TSS_LDT_ENTRY_STRUCT*) (&((GDT_ENTRY_STRUCT*)MinimalGDT)[3]) )->BaseAddress4 = tss64_base4; // TSS is a double-sized entry
   // Dang that looks pretty nuts.
 
-//DEBUG: // printf("MinimalGDT: %#qx : %#qx, %#qx, %#qx, %#qx, %#qx ; reg_data: %#qx, Limit: %hu\r\n", (uint64_t)MinimalGDT, ((uint64_t*)MinimalGDT)[0], ((uint64_t*)MinimalGDT)[1], ((uint64_t*)MinimalGDT)[2], ((uint64_t*)MinimalGDT)[3], ((uint64_t*)MinimalGDT)[4], gdt_reg_data.BaseAddress, gdt_reg_data.Limit);
+//DEBUG:
+// printf("MinimalGDT: %#qx : %#qx, %#qx, %#qx, %#qx, %#qx ; reg_data: %#qx, Limit: %hu\r\n", (uint64_t)MinimalGDT, ((uint64_t*)MinimalGDT)[0], ((uint64_t*)MinimalGDT)[1], ((uint64_t*)MinimalGDT)[2], ((uint64_t*)MinimalGDT)[3], ((uint64_t*)MinimalGDT)[4], gdt_reg_data.BaseAddress, gdt_reg_data.Limit);
+/*
+  for(uint8_t o = 0; o <= 26; o++)
+  {
+    printf("TSS64: %#x\r\n", ((uint32_t*)(&tss64))[o]);
+  }
+*/
+// END DEBUG
+
   set_gdtr(gdt_reg_data);
   set_tsr(0x18); // TSS segment is at index 3, and 0x18 >> 3 is 3. 0x18 is 24 in decimal.
   cs_update();
@@ -1507,20 +1530,20 @@ static void cs_update(void)
 // architecture, so this is a pretty important step.
 //
 
-__attribute__((aligned(64))) static IDT_GATE_STRUCT IDT_data[256] = {0}; // Reserve static memory for the IDT
+__attribute__((aligned(64))) static volatile IDT_GATE_STRUCT IDT_data[256] = {0}; // Reserve static memory for the IDT
 
-// Special stacks. (1 << 12) is 4 kiB
-#define NMI_STACK_SIZE (1 << 12)
-#define DF_STACK_SIZE (1 << 12)
-#define MC_STACK_SIZE (1 << 12)
-#define BP_STACK_SIZE (1 << 12)
+// Special stacks. (1ULL << 12) is 4 kiB
+#define NMI_STACK_SIZE (1ULL << 12)
+#define DF_STACK_SIZE (1ULL << 12)
+#define MC_STACK_SIZE (1ULL << 12)
+#define BP_STACK_SIZE (1ULL << 12)
 // See the ISR section later in this file for XSAVE area sizes
 
 // Ensuring 64-byte alignment for good measure
 __attribute__((aligned(64))) static volatile unsigned char NMI_stack[NMI_STACK_SIZE] = {0};
 __attribute__((aligned(64))) static volatile unsigned char DF_stack[DF_STACK_SIZE] = {0};
 __attribute__((aligned(64))) static volatile unsigned char MC_stack[MC_STACK_SIZE] = {0};
-__attribute__((aligned(64))) static volatile unsigned char BP_stack[BP_STACK_SIZE] = {0};
+__attribute__((aligned(64))) static volatile unsigned char BP_stack[BP_STACK_SIZE] = {0}; // Used for #BP and #DB
 
 // TODO: IRQs from hardware (keyboard interrupts, e.g.) might need their own stack, too.
 
@@ -1530,6 +1553,7 @@ void Setup_IDT(void)
   idt_reg_data.Limit = sizeof(IDT_data) - 1; // Max is 16 bytes * 256 entries = 4096, - 1 = 4095 or 0xfff
   idt_reg_data.BaseAddress = (uint64_t)IDT_data;
 
+  //
   // Set up TSS for special IST switches
   // Note: tss64 was defined in above Setup_MinimalGDT section.
   //
@@ -1537,25 +1561,37 @@ void Setup_IDT(void)
   // Without a separate known good stack, you'll find that calling int $0x08 will trigger a general protection exception--or a divide
   // by zero error with no hander will triple fault. The IST mechanism ensures this does not happen. If calling a handler with int $(num)
   // raises a general protection fault (and it's not the GPF exception 13), it might need its own stack. This is assuming that the IDT
-  // (and everything else) has been set up correctly. At the very least, it's a good idea to have separate stacks for NMI, Double Fault
-  // (#DF), Machine Check (#MC), and Debug (#BP) and thus each should have a corresponding IST entry. I found that having these 4, and
-  // aligning the main kernel stack to 64-bytes (in addition to aligning the 4 other stacks as per their instantiation above), solved a
-  // lot of head-scratching problems.
+  // (and everything else) has been set up correctly.
+  //
+  // At the very least, it's a good idea to have separate stacks for NMI, Double Fault (#DF), Machine Check (#MC), and Debug (#BP) and
+  // thus each should have a corresponding IST entry. I found that having these 4, and aligning the main kernel stack to 64-bytes (in
+  // addition to aligning the 4 other stacks as per their instantiation above), solved a lot of head-scratching problems (like the
+  // divide-by-zero triple fault). Intel also recommends the first 3 definitely have their own stack.
   //
   // There is some good documentation on 64-bit stack switching in the Linux kernel docs:
   // https://www.kernel.org/doc/Documentation/x86/kernel-stacks
+  //
 
-  tss64.IST_1_low = (uint32_t) ((uint64_t)NMI_stack);
-  tss64.IST_1_high = (uint32_t) ( ((uint64_t)NMI_stack) >> 32 );
+  // The address in IST gets loaded into %rsp, so end of the stack (not 'end - 1') address is needed
 
-  tss64.IST_2_low = (uint32_t) ((uint64_t)DF_stack);
-  tss64.IST_2_high = (uint32_t) ( ((uint64_t)DF_stack) >> 32 );
+  *(uint64_t*)(&tss64.IST_1_low) = (uint64_t) (NMI_stack + NMI_STACK_SIZE);
+  *(uint64_t*)(&tss64.IST_2_low) = (uint64_t) (DF_stack + DF_STACK_SIZE);
+  *(uint64_t*)(&tss64.IST_3_low) = (uint64_t) (MC_stack + MC_STACK_SIZE);
+  *(uint64_t*)(&tss64.IST_4_low) = (uint64_t) (BP_stack + BP_STACK_SIZE);
 
-  tss64.IST_3_low = (uint32_t) ((uint64_t)MC_stack);
-  tss64.IST_3_high = (uint32_t) ( ((uint64_t)MC_stack) >> 32 );
+/* // Same thing as above
+  tss64.IST_1_low = (uint32_t) ((uint64_t) (&NMI_stack[NMI_STACK_SIZE]));
+  tss64.IST_1_high = (uint32_t) ( ((uint64_t) (&NMI_stack[NMI_STACK_SIZE])) >> 32 );
 
-  tss64.IST_4_low = (uint32_t) ((uint64_t)BP_stack);
-  tss64.IST_4_high = (uint32_t) ( ((uint64_t)BP_stack) >> 32 );
+  tss64.IST_2_low = (uint32_t) ((uint64_t) (&DF_stack[DF_STACK_SIZE]));
+  tss64.IST_2_high = (uint32_t) ( ((uint64_t) (&DF_stack[DF_STACK_SIZE])) >> 32 );
+
+  tss64.IST_3_low = (uint32_t) ((uint64_t) (&MC_stack[MC_STACK_SIZE]));
+  tss64.IST_3_high = (uint32_t) ( ((uint64_t) (&MC_stack[MC_STACK_SIZE])) >> 32 );
+
+  tss64.IST_4_low = (uint32_t) ((uint64_t) (&BP_stack[BP_STACK_SIZE]));
+  tss64.IST_4_high = (uint32_t) ( ((uint64_t) (&BP_stack[BP_STACK_SIZE])) >> 32 );
+*/
 
   // Set up ISRs per ISR.S layout
 
@@ -1564,7 +1600,7 @@ void Setup_IDT(void)
   //
 
   set_interrupt_entry(0, (uint64_t)DE_ISR_pusher0); // Fault #DE: Divide Error (divide by 0 or not enough bits in destination)
-  set_interrupt_entry(1, (uint64_t)DB_ISR_pusher1); // Fault/Trap #DB: Debug Exception
+  set_BP_interrupt_entry(1, (uint64_t)DB_ISR_pusher1); // Fault/Trap #DB: Debug Exception, using same IST as #BP
   set_NMI_interrupt_entry(2, (uint64_t)NMI_ISR_pusher2); // NMI (Nonmaskable External Interrupt)
   // Fun fact: Hyper-V will send a watchdog timeout via an NMI if the system is halted for a while. Looks like it's supposed to crash the VM via
   // triple fault if there's no handler set up. Hpyer-V-Worker logs that the VM "has encountered a watchdog timeout and was reset" in the Windows
@@ -2040,7 +2076,7 @@ void Setup_Paging(void)
     cr4_2 = control_register_rw(4, 0, 0);
     if(cr4_2 == cr4)
     {
-      printf("Error disabling CR4.PGE.\r\n");
+      warning_printf("Error disabling CR4.PGE.\r\n");
     }
   }
 
@@ -2086,9 +2122,9 @@ void Setup_Paging(void)
 
       if(max_ram >= (1ULL << 52)) // 128PB (1ULL << 57) is the max VA, though 4PB (1ULL << 52) is the max PA
       {
-        printf("Hey! There's way too much RAM here. Is the year like 2050 or something?\r\nRAM will be limited to 4PB, the max allowed by 5-level paging wth 1GB pages.\r\n");
-        printf("At this point there's probably a new paging size (or a new paging mechanism? Is paging even used anymore?), which needs to be implmented in the code.\r\n");
-        printf("8K 120FPS displays must be mainstream by now, too...\r\n");
+        warning_printf("Hey! There's way too much RAM here. Is the year like 2050 or something?\r\nRAM will be limited to 4PB, the max allowed by 5-level paging wth 1GB pages.\r\n");
+        warning_printf("At this point there's probably a new paging size (or a new paging mechanism? Is paging even used anymore?), which needs to be implmented in the code.\r\n");
+        warning_printf("8K 120FPS displays must be mainstream by now, too...\r\n");
       }
 
       uint64_t max_pml5_entry = 1; // Always at least 1 entry
@@ -2188,7 +2224,7 @@ void Setup_Paging(void)
 
       if(max_ram >= (1ULL << 48)) // 256TB is the max with 4-level paging; to get the full 4PB (1 << 52) supported by the AMD64 4-level paging spec would require 16GB pages that don't exist (except on IBM POWER5+ mainframes)...
       {
-        printf("Hey! There's way too much RAM here and 5-level paging isn't enabled/supported.\r\nPlease contact your system vendor about this as it is a UEFI firmware issue.\r\nRAM will be limited to 256TB, the max allowed by 4-level paging.\r\n");
+        warning_printf("Hey! There's way too much RAM here and 5-level paging isn't enabled/supported.\r\nPlease contact your system vendor about this as it is a UEFI firmware issue.\r\nRAM will be limited to 256TB, the max allowed by 4-level paging.\r\n");
       }
 
       uint64_t max_pml4_entry = 1; // Always at least 1 entry
@@ -2251,12 +2287,12 @@ void Setup_Paging(void)
   {
     // Use 2MB pages, need 3 tables, max 256TB RAM
 
-    printf("1GB pages are not supported, falling back to 2MB for the page tables instead. The system will still act like 1GB pages are used, however.\r\n");
+    info_printf("1GB pages are not supported, falling back to 2MB for the page tables instead. Certain system functions will still act like 1GB pages are used, however.\r\n");
 
     if(max_ram >= (1ULL << 48)) // 256TB is the max with 4-level pages
     {
-      printf("Hey! There's way too much RAM here and 5-level paging isn't supported.\r\nRAM will be limited to 256TB, the max allowed by 4-level paging with 2MB pages.\r\n");
-      printf("In the event someone actually manages to trigger this error, please be aware that this situation means the paging tables alone will consume 1GB of RAM.\r\n");
+      warning_printf("Hey! There's way too much RAM here and 5-level paging isn't supported.\r\nRAM will be limited to 256TB, the max allowed by 4-level paging with 2MB pages.\r\n");
+      warning_printf("In the event someone actually manages to trigger this error, please be aware that this situation means the paging tables alone will consume 1GB of RAM.\r\n");
     }
 
     uint64_t max_pml4_entry = 1; // Always at least 1 entry
@@ -2329,7 +2365,7 @@ void Setup_Paging(void)
   }
 
   control_register_rw(3, (uint64_t)outermost_table, 1);
-  // Certain hypervisors like Hyper-V will crash right here if less than 4GB is allocated to the VM. Actually, it appears to be 3968MB or less, as this 4GBnumber appears to include the entirety of physical address space (including PCI config space, etc.).
+  // Certain hypervisors like Hyper-V will crash right here if less than 4GB is allocated to the VM. Actually, it appears to be 3968MB or less, as this 4GB number appears to include the entirety of physical address space (including PCI config space, etc.).
   // In Windows Event Viewer, Hyper-V-Worker will throw one of these errors:
   // "<VM Name> was faulted because the guest executed an intercepting instruction not supported by Hyper-V instruction emulation."
   // "<VM Name> was reset because an unrecoverable error occurred on a virtual processor that caused a triple fault."
@@ -2345,7 +2381,7 @@ void Setup_Paging(void)
     cr4_2 = control_register_rw(4, 0, 0);
     if(cr4_2 == cr4)
     {
-      printf("Error setting CR4.PGE bit.\r\n");
+      warning_printf("Error setting CR4.PGE bit.\r\n");
     }
   }
 }
@@ -2356,7 +2392,7 @@ void Setup_Paging(void)
 //
 // Get the 48-byte system brandstring (something like "Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz")
 //
-// "brandstring" must be a 48-byte array
+// "brandstring" must be a 48-byte array. Returns ~0ULL address as a pointer if brand string is not supported.
 //
 
 char * Get_Brandstring(uint32_t * brandstring)
@@ -2413,8 +2449,8 @@ char * Get_Brandstring(uint32_t * brandstring)
   }
   else
   {
-    printf("Brand string not supported\r\n");
-    return NULL;
+    error_printf("Brand string not supported\r\n");
+    return (char*)~0ULL;
   }
 }
 
@@ -2824,7 +2860,8 @@ void cpu_features(uint64_t rax_value, uint64_t rcx_value)
 // Reminder: NMI, Double Fault, Machine Check, and Breakpoint have their own stacks from the x86-64 IST mechanism as set in Setup_IDT().
 //
 
-#define XSAVE_SIZE (1 << 13)
+// (1ULL << 13) is 8kB
+#define XSAVE_SIZE (1ULL << 13)
 
 __attribute__((aligned(64))) static volatile unsigned char cpu_xsave_space[XSAVE_SIZE] = {0}; // Generic space for unhandled/unknown IDT vectors in the 0-31 range.
 __attribute__((aligned(64))) static volatile unsigned char user_xsave_space[XSAVE_SIZE] = {0}; // For vectors 32-255, which can't preempt each other due to interrupt gating (IF in RFLAGS is cleared during ISR execution)
@@ -2942,7 +2979,7 @@ void User_ISR_handler(INTERRUPT_FRAME * i_frame)
     //
 
     default:
-      printf("User_ISR_handler: Unhandled Interrupt! IDT Entry: %#qu\r\n", i_frame->isr_num);
+      error_printf("User_ISR_handler: Unhandled Interrupt! IDT Entry: %#qu\r\n", i_frame->isr_num);
       ISR_regdump(i_frame);
       AVX_regdump((XSAVE_AREA_LAYOUT*)user_xsave_space);
       asm volatile("hlt");
@@ -2973,7 +3010,7 @@ void CPU_ISR_handler(INTERRUPT_FRAME * i_frame)
   // OK, since xsave has been called we can now safely use AVX instructions in this interrupt--up until xrstor is called, at any rate.
   // Using an interrupt gate in the IDT means we won't get preempted now, either, which would wreck the xsave area.
 
-  printf("CPU_ISR_handler: Unhandled Interrupt! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("CPU_ISR_handler: Unhandled Interrupt! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   AVX_regdump((XSAVE_AREA_LAYOUT*)cpu_xsave_space);
   asm volatile("hlt");
@@ -3002,7 +3039,7 @@ void CPU_EXC_handler(EXCEPTION_FRAME * e_frame)
   // OK, since xsave has been called we can now safely use AVX instructions in this interrupt--up until xrstor is called, at any rate.
   // Using an interrupt gate in the IDT means we won't get preempted now, either, which would wreck the xsave area.
 
-  printf("CPU_EXC_handler: Unhandled Exception! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
+  error_printf("CPU_EXC_handler: Unhandled Exception! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
   EXC_regdump(e_frame);
   AVX_regdump((XSAVE_AREA_LAYOUT*)cpu_xsave_space);
   asm volatile("hlt");
@@ -3029,7 +3066,7 @@ void DE_ISR_handler(INTERRUPT_FRAME * i_frame) // Fault #DE: Divide Error (divid
                 : "memory" // Clobbers
               );
 
-  printf("Fault #DE: Divide Error! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Fault #DE: Divide Error! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   asm volatile("hlt");
 
@@ -3051,7 +3088,7 @@ void DB_ISR_handler(INTERRUPT_FRAME * i_frame) // Fault/Trap #DB: Debug Exceptio
                 : "memory" // Clobbers
               );
 
-  printf("Fault/Trap #DB: Debug Exception! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Fault/Trap #DB: Debug Exception! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   asm volatile("hlt");
 
@@ -3073,7 +3110,7 @@ void NMI_ISR_handler(INTERRUPT_FRAME * i_frame) // NMI (Nonmaskable External Int
                 : "memory" // Clobbers
               );
 
-  printf("NMI: Nonmaskable Interrupt! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("NMI: Nonmaskable Interrupt! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   asm volatile("hlt");
 
@@ -3095,7 +3132,7 @@ void BP_ISR_handler(INTERRUPT_FRAME * i_frame) // Trap #BP: Breakpoint (INT3 ins
                 : "memory" // Clobbers
               );
 
-  printf("Trap #BP: Breakpoint! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Trap #BP: Breakpoint! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   asm volatile("hlt");
 
@@ -3117,7 +3154,7 @@ void OF_ISR_handler(INTERRUPT_FRAME * i_frame) // Trap #OF: Overflow (INTO instr
                 : "memory" // Clobbers
               );
 
-  printf("Trap #OF: Overflow! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Trap #OF: Overflow! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   asm volatile("hlt");
 
@@ -3139,7 +3176,7 @@ void BR_ISR_handler(INTERRUPT_FRAME * i_frame) // Fault #BR: BOUND Range Exceede
                 : "memory" // Clobbers
               );
 
-  printf("Fault #BR: BOUND Range Exceeded! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Fault #BR: BOUND Range Exceeded! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   asm volatile("hlt");
 
@@ -3161,7 +3198,7 @@ void UD_ISR_handler(INTERRUPT_FRAME * i_frame) // Fault #UD: Invalid or Undefine
                 : "memory" // Clobbers
               );
 
-  printf("Fault #UD: Invalid or Undefined Opcode! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Fault #UD: Invalid or Undefined Opcode! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   asm volatile("hlt");
 
@@ -3183,7 +3220,7 @@ void NM_ISR_handler(INTERRUPT_FRAME * i_frame) // Fault #NM: Device Not Availabl
                 : "memory" // Clobbers
               );
 
-  printf("Fault #NM: Device Not Available Exception! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Fault #NM: Device Not Available Exception! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   asm volatile("hlt");
 
@@ -3205,7 +3242,7 @@ void DF_EXC_handler(EXCEPTION_FRAME * e_frame) // Abort #DF: Double Fault (error
                 : "memory" // Clobbers
               );
 
-  printf("Abort #DF: Double Fault! IDT Entry: %#qu, Error Code (always 0): %#qx\r\n", e_frame->isr_num, e_frame->error_code);
+  error_printf("Abort #DF: Double Fault! IDT Entry: %#qu, Error Code (always 0): %#qx\r\n", e_frame->isr_num, e_frame->error_code);
   EXC_regdump(e_frame);
   AVX_regdump((XSAVE_AREA_LAYOUT*)df_xsave_space);
   while(1) // #DF is an end of the line if this is a single application and not a full-blown OS that runs programs
@@ -3231,7 +3268,7 @@ void CSO_ISR_handler(INTERRUPT_FRAME * i_frame) // Fault (i386): Coprocessor Seg
                 : "memory" // Clobbers
               );
 
-  printf("Fault (i386): Coprocessor Segment Overrun! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Fault (i386): Coprocessor Segment Overrun! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   while(1) // Turns out this is actually an abort!
   {
@@ -3256,7 +3293,7 @@ void TS_EXC_handler(EXCEPTION_FRAME * e_frame) // Fault #TS: Invalid TSS
                 : "memory" // Clobbers
               );
 
-  printf("Fault #TS: Invalid TSS! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
+  error_printf("Fault #TS: Invalid TSS! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
   EXC_regdump(e_frame);
   asm volatile("hlt");
 
@@ -3278,7 +3315,7 @@ void NP_EXC_handler(EXCEPTION_FRAME * e_frame) // Fault #NP: Segment Not Present
                 : "memory" // Clobbers
               );
 
-  printf("Fault #NP: Segment Not Present! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
+  error_printf("Fault #NP: Segment Not Present! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
   EXC_regdump(e_frame);
   asm volatile("hlt");
 
@@ -3300,7 +3337,7 @@ void SS_EXC_handler(EXCEPTION_FRAME * e_frame) // Fault #SS: Stack Segment Fault
                 : "memory" // Clobbers
               );
 
-  printf("Fault #SS: Stack Segment Fault! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
+  error_printf("Fault #SS: Stack Segment Fault! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
   EXC_regdump(e_frame);
   asm volatile("hlt");
 
@@ -3322,7 +3359,7 @@ void GP_EXC_handler(EXCEPTION_FRAME * e_frame) // Fault #GP: General Protection
                 : "memory" // Clobbers
               );
 
-  printf("Fault #GP: General Protection! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
+  error_printf("Fault #GP: General Protection! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
   // Some of these can actually be corrected. Not always the end of the world.
   // This is just a generic template example.
   switch(e_frame->error_code)
@@ -3357,10 +3394,10 @@ void PF_EXC_handler(EXCEPTION_FRAME * e_frame) // Fault #PF: Page Fault
 
   uint64_t cr2 = control_register_rw(2, 0, 0); // CR2 has the page fault linear address
   uint64_t cr3 = control_register_rw(3, 0, 0); // CR3 has the page directory base (bottom 12 bits of address are assumed 0)
-  printf("Fault #PF: Page Fault! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
+  info_printf("Fault #PF: Page Fault! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
   printf("CR2: %#qx\r\n", cr2);
   printf("CR3: %#qx\r\n", cr3);
-  // This is just a generic template example; page faults are usually not the end of the world.
+  // This is just a generic template example; page faults are usually not the end of the world. That's why it gets an info_printf
   switch(e_frame->error_code)
   {
     default:
@@ -3392,7 +3429,7 @@ void MF_ISR_handler(INTERRUPT_FRAME * i_frame) // Fault #MF: Math Error (x87 FPU
                 : "memory" // Clobbers
               );
 
-  printf("Fault #MF: x87 Math Error! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Fault #MF: x87 Math Error! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   AVX_regdump((XSAVE_AREA_LAYOUT *)mf_xsave_space);
   asm volatile("hlt");
@@ -3415,7 +3452,7 @@ void AC_EXC_handler(EXCEPTION_FRAME * e_frame) // Fault #AC: Alignment Check (er
                 : "memory" // Clobbers
               );
 
-  printf("Fault #AC: Alignment Check! IDT Entry: %#qu, Error Code (usually 0): %#qx\r\n", e_frame->isr_num, e_frame->error_code);
+  error_printf("Fault #AC: Alignment Check! IDT Entry: %#qu, Error Code (usually 0): %#qx\r\n", e_frame->isr_num, e_frame->error_code);
   EXC_regdump(e_frame);
   asm volatile("hlt");
 
@@ -3437,7 +3474,7 @@ void MC_ISR_handler(INTERRUPT_FRAME * i_frame) // Abort #MC: Machine Check
                 : "memory" // Clobbers
               );
 
-  printf("Abort #MC: Machine Check! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Abort #MC: Machine Check! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   AVX_regdump((XSAVE_AREA_LAYOUT*)mc_xsave_space);
   while(1) // There's no escaping #MC
@@ -3463,7 +3500,7 @@ void XM_ISR_handler(INTERRUPT_FRAME * i_frame) // Fault #XM: SIMD Floating-Point
                 : "memory" // Clobbers
               );
 
-  printf("Fault #XM: SIMD Floating-Point Exception! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Fault #XM: SIMD Floating-Point Exception! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   AVX_regdump((XSAVE_AREA_LAYOUT*)xm_xsave_space);
   asm volatile("hlt");
@@ -3486,7 +3523,7 @@ void VE_ISR_handler(INTERRUPT_FRAME * i_frame) // Fault #VE: Virtualization Exce
                 : "memory" // Clobbers
               );
 
-  printf("Fault #VE: Virtualization Exception! IDT Entry: %#qu\r\n", i_frame->isr_num);
+  error_printf("Fault #VE: Virtualization Exception! IDT Entry: %#qu\r\n", i_frame->isr_num);
   ISR_regdump(i_frame);
   asm volatile("hlt");
 
@@ -3510,7 +3547,7 @@ void SX_EXC_handler(EXCEPTION_FRAME * e_frame) // Fault #SX: Security Exception
                 : "memory" // Clobbers
               );
 
-  printf("Fault #SX: Security Exception! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
+  error_printf("Fault #SX: Security Exception! IDT Entry: %#qu, Error Code: %#qx\r\n", e_frame->isr_num, e_frame->error_code);
   EXC_regdump(e_frame);
   asm volatile("hlt");
 
