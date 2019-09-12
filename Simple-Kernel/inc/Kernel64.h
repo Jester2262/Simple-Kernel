@@ -788,6 +788,21 @@ void single_pixel(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x, UINT32 y, UIN
 void bitmap_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
 void Output_render_bitmap(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const unsigned char * bitmap, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
 
+void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_final, UINT32 y_final, UINT32 color);
+void Draw_vector_polar(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 theta, UINT32 color);
+
+void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 r_diff, UINT32 r_step, INT32 theta_init, INT32 theta_diff, UINT32 color);
+void Draw_filled_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 r_diff, UINT32 r_step, INT32 theta_init, INT32 theta_diff, UINT32 color);
+
+void Draw_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 x_length, INT32 y_length, UINT32 color);
+void Draw_filled_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_length, UINT32 y_length, UINT32 color);
+
+void Draw_quad(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 x3, UINT32 y3, UINT32 x4, UINT32 y4, UINT32 color);
+void Draw_filled_quad(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 x3, UINT32 y3, UINT32 x4, UINT32 y4, UINT32 color);
+
+void Draw_triangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 x3, UINT32 y3, UINT32 color);
+void Draw_filled_triangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 x3, UINT32 y3, UINT32 color);
+
 void bitmap_bitswap(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output);
 void bitmap_bitreverse(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output);
 void bitmap_bytemirror(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output);
@@ -802,12 +817,6 @@ void single_char_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int char
 void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * string, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale);
 void formatted_string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, const char * string, ...);
 void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
-
-void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_final, UINT32 y_final, UINT32 color);
-void Draw_vector_polar(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 theta, UINT32 color);
-void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 r_diff, INT32 r_step, INT32 theta_init, INT32 theta_diff, UINT32 color);
-void Draw_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 x_length, INT32 y_length, UINT32 color);
-void Draw_filled_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_length, UINT32 y_length, UINT32 color);
 
 // Printf-related functions (Print.c)
 int snprintf(char *str, size_t size, const char *format, ...);

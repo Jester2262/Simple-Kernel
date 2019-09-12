@@ -182,7 +182,7 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 
   // Now initialize the system (Virtual mappings (identity-map), printf, AVX, any straggling control registers, HWP, maskable interrupts)
   System_Init(LP); // See System.c for what this does. One step is involves calling a function that can re-assign printf to a different GPU.
-  
+
   // Main Body Start
   uint64_t start_time = get_tick();
 
@@ -249,21 +249,41 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 
   Draw_vector(Global_Print_Info.defaultGPU, 100, 700, 400, 725, 0x00FF00FF);
 
-  Draw_arc(Global_Print_Info.defaultGPU, 600, 100, 50, 0, 0, -45, 90, 0x00FF0000);
-  Draw_arc(Global_Print_Info.defaultGPU, 600, 100, -50, 0, 0, -45, 90, 0x00FF00FF);
-  Draw_arc(Global_Print_Info.defaultGPU, 600, 100, 50, 0, 0, -45, -90, 0x00FFFF00);
-  Draw_arc(Global_Print_Info.defaultGPU, 600, 100, 50, 0, 0, 135, -90, 0x0000FFFF);
+  Draw_arc(Global_Print_Info.defaultGPU, 400, 100, 50, 0, 0, -45, 90, 0x00FF0000);
+  Draw_arc(Global_Print_Info.defaultGPU, 400, 100, -50, 0, 0, -45, 90, 0x00FF00FF);
+  Draw_arc(Global_Print_Info.defaultGPU, 400, 100, 50, 0, 0, -45, -90, 0x00FFFF00);
+  Draw_arc(Global_Print_Info.defaultGPU, 400, 100, 50, 0, 0, 135, -90, 0x0000FFFF);
 
+  Draw_filled_arc(Global_Print_Info.defaultGPU, 600, 100, 50, 0, 0, -45, 90, 0x00FF0000);
+  Draw_filled_arc(Global_Print_Info.defaultGPU, 600, 100, -50, 0, 0, -45, 90, 0x00FF00FF);
+  Draw_filled_arc(Global_Print_Info.defaultGPU, 600, 100, 50, 0, 0, -45, -90, 0x00FFFF00);
+  Draw_filled_arc(Global_Print_Info.defaultGPU, 600, 100, 50, 0, 0, 135, -90, 0x0000FFFF);
+/*
   for(uint32_t wide_arc = 0; wide_arc < 3; wide_arc++)
   {
     for(uint32_t tall_arc = 0; tall_arc < 3; tall_arc++)
     {
-      Draw_arc(Global_Print_Info.defaultGPU, 511+wide_arc, 383+tall_arc, 0, 1, 10, 245, -960, 0x00FF0000); // SSSSEEEEGGGAAAAA!!!
+      Draw_arc(Global_Print_Info.defaultGPU, 511+wide_arc, 383+tall_arc, 0, 1, 10, 245, -960, 0x00FF0000); // SSSSEEEEGGGAAAAA!!!!
     }
   }
+*/
+  Draw_filled_arc(Global_Print_Info.defaultGPU, 512, 384, 0, 1, 3, -115, 960, 0x00FF0000);
 
-  Draw_filled_rectangle(Global_Print_Info.defaultGPU, 500, 500, 200, 200, 0x00FFFF00);
+  Draw_rectangle(Global_Print_Info.defaultGPU, 750, 475, 250, 250, 0x000000FF);
+  Draw_filled_rectangle(Global_Print_Info.defaultGPU, 775, 500, 200, 200, 0x00FFFF00);
 
+  Draw_filled_arc(Global_Print_Info.defaultGPU, 924, 100, 90, 0, 0, 0, 360, 0x00FFFFFF);
+  Draw_arc(Global_Print_Info.defaultGPU, 923, 100, 100, 0, 0, 0, 360, 0x00FF0000);
+
+  Draw_filled_triangle(Global_Print_Info.defaultGPU, 50, 710, 55, 600, 400, 310, 0x00FF00FF);
+  Draw_triangle(Global_Print_Info.defaultGPU, 50, 710, 55, 600, 400, 310, 0x0000FF00);
+
+  Draw_triangle(Global_Print_Info.defaultGPU, 99, 601, 104, 498, 406, 713, 0x00FF0000);
+  Draw_triangle(Global_Print_Info.defaultGPU, 100, 600, 105, 500, 400, 710, 0x00FFFF00);
+  Draw_filled_triangle(Global_Print_Info.defaultGPU, 100, 600, 105, 500, 400, 710, 0x0000FFFF);
+
+  Draw_filled_triangle(Global_Print_Info.defaultGPU, 700, 600, 1000, 300, 1000, 600, 0x0000FF00);
+  Draw_triangle(Global_Print_Info.defaultGPU, 700, 600, 1000, 300, 700, 300, 0x00FF0000);
 /*
   printf("Avg CPU freq: %qu\r\n", get_CPU_freq(NULL, 0));
   uint64_t perfcounters[2] = {1, 1};
@@ -285,7 +305,7 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   printf("\r\n\r\n");
 */
 
-//  Print_All_CRs_and_Some_Major_CPU_Features(); // The output from this will fill up a 768 vertical resolution screen with an 8 height font set to scale factor 1.
+//  Print_All_CRs_and_Some_Major_CPU_Features(); // The output from this will fill up a 768 vertical resolution screen with an 8 height font set to yscale factor 1.
 
   // ASM so that GCC doesn't mess with this loop. This is about as optimized this can get.
   asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow

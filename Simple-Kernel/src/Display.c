@@ -27,10 +27,12 @@ static inline int64_t int_abs(int64_t x);
 // They are used here simply because they're useful for a quick way to draw things on screen.
 static inline double quick_cos_deg(double x);
 static inline double quick_sin_deg(double x);
+static inline double quick_tan_deg(double x);
 static inline double * quick_sincos_deg(double * x);
 
 static inline double quick_cos_rad(double x);
 static inline double quick_sin_rad(double x);
+static inline double quick_tan_rad(double x);
 static inline double * quick_sincos_rad(double * two_x);
 
 
@@ -1196,19 +1198,25 @@ void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_
       {
         uint64_t x_dist = x_final - x_init;
 
-        for(uint64_t x = 0; x <= x_dist; pixel_address += 4, x++)
+        AVX_memset_4B((UINT32*)pixel_address, color, x_dist + 1);
+        /*
+        for(uint64_t x = 0; x <= x_dist; pixel_address += 4, x++) // Portable version
         {
           *(UINT32*)pixel_address = color;
         }
+        */
       }
       else // x_init > x_final, left direction
       {
         uint64_t x_dist = x_init - x_final;
 
-        for(uint64_t x = 0; x <= x_dist; pixel_address -= 4, x++)
+        AVX_memset_4B((UINT32*)(pixel_address - 4*(x_dist + 1)), color, x_dist + 1);
+        /*
+        for(uint64_t x = 0; x <= x_dist; pixel_address -= 4, x++) // Portable version
         {
           *(UINT32*)pixel_address = color;
         }
+        */
       }
     }
 
@@ -1239,6 +1247,7 @@ void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_
           double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
           uint64_t this_step = 0;
           uint64_t prev_step = 0;
+
           for(uint64_t y = 1; (y - 1) <= y_dist; pixel_address += BytesPerScanline + 4 * (this_step - prev_step), y++)
           {
             *(UINT32*)pixel_address = color;
@@ -1251,6 +1260,7 @@ void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_
           double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
           uint64_t this_step = 0;
           uint64_t prev_step = 0;
+
           for(uint64_t x = 1; (x - 1) <= x_dist; pixel_address += BytesPerScanline * (this_step - prev_step) + 4, x++)
           {
             *(UINT32*)pixel_address = color;
@@ -1275,6 +1285,7 @@ void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_
           double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
           uint64_t this_step = 0;
           uint64_t prev_step = 0;
+
           for(uint64_t y = 1; (y - 1) <= y_dist; pixel_address += BytesPerScanline - 4 * (this_step - prev_step), y++)
           {
             *(UINT32*)pixel_address = color;
@@ -1287,6 +1298,7 @@ void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_
           double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
           uint64_t this_step = 0;
           uint64_t prev_step = 0;
+
           for(uint64_t x = 1; (x - 1) <= x_dist; pixel_address +=  BytesPerScanline * (this_step - prev_step) - 4, x++)
           {
             *(UINT32*)pixel_address = color;
@@ -1324,6 +1336,7 @@ void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_
           double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
           uint64_t this_step = 0;
           uint64_t prev_step = 0;
+
           for(uint64_t y = 1; (y - 1) <= y_dist; pixel_address -= BytesPerScanline - 4 * (this_step - prev_step), y++)
           {
             *(UINT32*)pixel_address = color;
@@ -1336,6 +1349,7 @@ void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_
           double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
           uint64_t this_step = 0;
           uint64_t prev_step = 0;
+
           for(uint64_t x = 1; (x - 1) <= x_dist; pixel_address -= BytesPerScanline * (this_step - prev_step) - 4, x++)
           {
             *(UINT32*)pixel_address = color;
@@ -1360,6 +1374,7 @@ void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_
           double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
           uint64_t this_step = 0;
           uint64_t prev_step = 0;
+
           for(uint64_t y = 1; (y - 1) <= y_dist; pixel_address -= BytesPerScanline + 4 * (this_step - prev_step), y++)
           {
             *(UINT32*)pixel_address = color;
@@ -1372,6 +1387,7 @@ void Draw_vector(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_
           double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
           uint64_t this_step = 0;
           uint64_t prev_step = 0;
+
           for(uint64_t x = 1; (x - 1) <= x_dist; pixel_address -= BytesPerScanline * (this_step - prev_step) + 4, x++)
           {
             *(UINT32*)pixel_address = color;
@@ -1478,6 +1494,26 @@ static inline double quick_sin_deg(double x)
   return x;
 }
 
+// x in degrees
+static inline double quick_tan_deg(double x)
+{
+  int constant = 180;
+
+  // convert to radians, take tan
+  asm volatile ("fldpi\n\t" // Load pi into ST0
+                "fldl %[in_out]\n\t" // Load variable into ST0, bump pi to ST1
+                "FMULP\n\t" // Multiply ST1 by ST0, pop stack
+                "FIDIV %[divisor]\n\t" // Divide ST0 by 180
+                "FPTAN\n\t" // Take tan of ST0
+                "fstp %%st0\n\t" // FPTAN pushes a 1.0 onto the FPU stack. Don't want it, so store ST0 into itself and pop it.
+                "fstpl %[in_out]\n\t" // store ST0, which now has the result
+               : [in_out] "+m" (x)
+               : [divisor] "m" (constant)
+              );
+
+  return x;
+}
+
 // Takes an array of 2 doubles (degrees)
 // Array member two_x[0] needs to have the input angle
 // On output, two_x[0] = cosine, two_x[1] = sine
@@ -1531,6 +1567,21 @@ static inline double quick_sin_rad(double x)
   return x;
 }
 
+// x in radians
+static inline double quick_tan_rad(double x)
+{
+  // take tan
+  asm volatile ("fldl %[in_out]\n\t" // Load variable into ST0
+                "FPTAN\n\t" // Take tan of ST0
+                "fstp %%st0\n\t" // FPTAN pushes a 1.0 onto the FPU stack. Don't want it, so store ST0 into itself and pop it.
+                "fstpl %[in_out]\n\t" // store ST0, which now has the result
+               : [in_out] "+m" (x)
+               : // No inputs
+              );
+
+  return x;
+}
+
 // Takes an array of 2 doubles (radians)
 // Array member two_x[0] needs to have the input angle
 // On output, two_x[0] = cosine, two_x[1] = sine
@@ -1563,7 +1614,6 @@ static inline double * quick_sincos_rad(double * two_x)
 // theta_init: angle (in degrees) of the source vector radius, relative to (x_init, y_init) -- think of (x_init, y_init) as defining the origin of the arc's coordinate system
 // theta_diff: sweep angle (in degrees), angle determins direction. Note that |theta_diff| == arc length
 // arc_color: arc color
-// fill_color: color to fill in the whole wedge. Make it transparent to disable fill.
 //
 // For those unfamiliar with polar coordinates, this function works like so:
 //
@@ -1580,7 +1630,7 @@ static inline double * quick_sincos_rad(double * two_x)
 //
 
 // Those weird-looking arcs that can be made in MS Paint or MS Word are actually just a couple different arcs stitched together. It's true of polylines in general.
-void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 r_diff, INT32 r_step, INT32 theta_init, INT32 theta_diff, UINT32 color)
+void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 r_diff, UINT32 r_step, INT32 theta_init, INT32 theta_diff, UINT32 color)
 {
   if(y_init >= GPU.Info->VerticalResolution)
   {
@@ -1592,11 +1642,6 @@ void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_ini
     error_printf("Draw_arc error: x_init is larger than horizontal resolution.\r\n");
     return ;
   }
-  else if(r_step >> 31) // 2's comp sign check for negative
-  {
-    error_printf("Draw_arc error: r_step must be >= 0.\r\n");
-    return ;
-  }
 
   // Calculating any more sophisticated bounds requires precomputing sine and cosine for the longest point in the arc/circle/spiral.
   // Needless to say, this can take a while. By sticking checks that accomplish the same thing in the for loop and using the
@@ -1604,7 +1649,7 @@ void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_ini
   // conditional branches in the for loop take up many fewer instructions since the compiler ccan reasonably expect what will happen.
   // In this case, using __builtin_expect makes the conditional branch sanity checks take about 2-3 cycles max after micro-op fusion.
   // Looking at the asm output, GCC appears to be plenty smart enough to figure out the branch probabilities itself, but in this specific
-  // case it doesn't hurt to be explicit in case something ever changes in the future. In any event, I'll pay the 2-3 cycles to prevent major
+  // case it doesn't hurt to be explicit in the event something ever changes in the future. I'll pay the 2-3 cycles to prevent major
   // overflow and memory corruption problems, especially when the loop at best is already in the ~50-100 cycle range per iteration.
 
   uint32_t transparency_color = 0xFF000000;
@@ -1620,7 +1665,7 @@ void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_ini
   {
     double sincos_array[2] = {180, 0}; // Reminder that first member is the input
 
-    if(theta_diff >> 31) // 2's comp sign check for negative, clockwise sweep direction
+    if(theta_diff < 0) // 2's comp sign check for negative, clockwise sweep direction
     {
       if(r_step)
       {
@@ -1649,6 +1694,9 @@ void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_ini
             error_printf("Draw_arc error: x_final is larger than horizontal resolution.\r\n");
             return ;
           }
+
+          // TODO: Something needs to be done here about the gap between pixels
+          // Also, from math: arc length = r * theta (in rads)
 
           *(UINT32*)(GPU.FrameBufferBase + (y_final * GPU.Info->PixelsPerScanLine + x_final) * 4) = color;
 
@@ -1680,6 +1728,8 @@ void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_ini
             error_printf("Draw_arc error: x_final is larger than horizontal resolution.\r\n");
             return ;
           }
+
+          // TODO: Something needs to be done here about the gap between pixels
 
           *(UINT32*)(GPU.FrameBufferBase + (y_final * GPU.Info->PixelsPerScanLine + x_final) * 4) = color;
         }
@@ -1715,6 +1765,8 @@ void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_ini
             return ;
           }
 
+          // TODO: Something needs to be done here about the gap between pixels
+
           *(UINT32*)(GPU.FrameBufferBase + (y_final * GPU.Info->PixelsPerScanLine + x_final) * 4) = color;
 
           prev_r_step = this_r_step;
@@ -1747,6 +1799,8 @@ void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_ini
             return ;
           }
 
+          // TODO: Something needs to be done here about the gap between pixels
+
           *(UINT32*)(GPU.FrameBufferBase + (y_final * GPU.Info->PixelsPerScanLine + x_final) * 4) = color;
         }
       }
@@ -1755,10 +1809,230 @@ void Draw_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_ini
   } // end transparency check
 }
 
-// To fill arc, compute first and last points, draw cartesian vector between them. Do this parallel iter for each point.
-// For spirals with varying r, just draw vector to every point from origin
-// By the way, arc length should be calculated L = r*theta (in rads)...
-// TODO
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_filled_arc: Draw An Arc in Polar Coordinates And Fill It In
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This works exactly the same way as Draw_arc(), but it fills in the arc.
+//
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x_init and y_init: (x,y) coordinates on the screen of the arc's coordinate system's origin, relative to the top left corner ((0,0))
+// r: length of the radius, sign dictates direction
+// r_diff: increment/decrement r by this amount every r_step, where r_step is some fraction of theta_diff
+// r_step: increment r by r_diff every this many points along the arc. Set this to 0 to disable increment/decrement of r by r_diff. A higher number makes a tighter spiral.
+// theta_init: angle (in degrees) of the source vector radius, relative to (x_init, y_init) -- think of (x_init, y_init) as defining the origin of the arc's coordinate system
+// theta_diff: sweep angle (in degrees), angle determins direction. Note that |theta_diff| == arc length
+// arc_color: arc color
+//
+// See Draw_arc() for more details.
+//
+
+void Draw_filled_arc(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 r, INT32 r_diff, UINT32 r_step, INT32 theta_init, INT32 theta_diff, UINT32 color)
+{
+  if(y_init >= GPU.Info->VerticalResolution)
+  {
+    error_printf("Draw_filled_arc error: y_init is larger than vertical resolution.\r\n");
+    return ;
+  }
+  else if(x_init >= GPU.Info->HorizontalResolution)
+  {
+    error_printf("Draw_filled_arc error: x_init is larger than horizontal resolution.\r\n");
+    return ;
+  }
+
+  // Calculating any more sophisticated bounds requires precomputing sine and cosine for the longest point in the arc/circle/spiral.
+  // Needless to say, this can take a while. By sticking checks that accomplish the same thing in the for loop and using the
+  // "__builtin_expect()" macro, we can tell the compiler to optimize for a specific branch. Doing this means that, in total, the
+  // conditional branches in the for loop take up many fewer instructions since the compiler ccan reasonably expect what will happen.
+  // In this case, using __builtin_expect makes the conditional branch sanity checks take about 2-3 cycles max after micro-op fusion.
+  // Looking at the asm output, GCC appears to be plenty smart enough to figure out the branch probabilities itself, but in this specific
+  // case it doesn't hurt to be explicit in case something ever changes in the future. In any event, I'll pay the 2-3 cycles to prevent major
+  // overflow and memory corruption problems, especially when the loop at best is already in the ~50-100 cycle range per iteration.
+
+  uint32_t transparency_color = 0xFF000000;
+  if(GPU.Info->PixelFormat == PixelBitMask)
+  {
+    transparency_color = GPU.Info->PixelInformation.ReservedMask;
+  }
+
+  // You know what?
+  // I think this is actually faster than doing an iterative method that involves conditional branches inside for loops.
+  // The error checks at the end before printing should not be a problem.
+  if( !(color & transparency_color) )
+  {
+    double sincos_array[2] = {180, 0}; // Reminder that first member is the input
+    int32_t theta_last = theta_init + theta_diff;
+
+    if(theta_diff < 0)
+    {
+      int32_t theta_end = theta_diff >> 1; // theta_dff / 2, with odds rounded up one (an odd's half needs to be the same as the even above its half)
+      // For negative numbers the bit shift rounds towards negative infinity.
+      // This is OK on x86, but not very portable.
+
+      if(r_step)
+      {
+        int32_t this_r_step = 0;
+        int32_t prev_r_step = 0;
+        double r_div = ((double)r_diff) / ((double)r_step);
+        int32_t last_r = (int32_t)(r_div * (double)(-theta_diff));
+
+        for(int32_t theta_diff_iter = 0, theta_iter = 0; theta_iter >= theta_end; r += (this_r_step - prev_r_step), last_r -= (this_r_step - prev_r_step), theta_iter--, theta_diff_iter++)
+        {
+          sincos_array[0] = (double)(theta_init + theta_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final = (uint32_t) ((int64_t)x_init + x_offset);
+          uint32_t y_final = (uint32_t) ((int64_t)y_init - y_offset); // Because (+) is down
+
+          // Now get the parallel pixel
+
+          sincos_array[0] = (double)(theta_last + theta_diff_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset2 = (int64_t) ((double)last_r * sincos_array[0]); // cosine
+          int64_t y_offset2 = (int64_t) ((double)last_r * sincos_array[1]); // sine
+
+          uint32_t x_final2 = (uint32_t) ((int64_t)x_init + x_offset2);
+          uint32_t y_final2 = (uint32_t) ((int64_t)y_init - y_offset2); // Because (+) is down
+
+          // Draw vector has error checks
+
+          // TODO: Something needs to be done here about the gap between pixels
+
+          Draw_vector(GPU, x_final, y_final, x_final2, y_final2, color);
+
+          prev_r_step = this_r_step;
+          this_r_step = (int32_t)(r_div * ((double)(-theta_iter)));
+        }
+      }
+      else
+      {
+
+        for(int32_t theta_diff_iter = 0, theta_iter = 0; theta_iter >= theta_end; theta_iter--, theta_diff_iter++)
+        {
+          sincos_array[0] = (double)(theta_init + theta_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final = (uint32_t) ((int64_t)x_init + x_offset);
+          uint32_t y_final = (uint32_t) ((int64_t)y_init - y_offset); // Because (+) is down
+
+          // Now get the parallel pixel
+
+          sincos_array[0] = (double)(theta_last + theta_diff_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset2 = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset2 = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final2 = (uint32_t) ((int64_t)x_init + x_offset2);
+          uint32_t y_final2 = (uint32_t) ((int64_t)y_init - y_offset2); // Because (+) is down
+
+          // Draw vector has error checks
+
+          // TODO: Something needs to be done here about the gap between pixels
+
+          Draw_vector(GPU, x_final, y_final, x_final2, y_final2, color);
+        }
+      }
+    }
+    else // positive, counterclockwise sweep direction
+    {
+      int32_t theta_end = (theta_diff + 1) >> 1; // theta_dff / 2, with odds rounded up one (an odd's half needs to be the same as the even above its half)
+
+      if(r_step)
+      {
+        int32_t this_r_step = 0;
+        int32_t prev_r_step = 0;
+        double r_div = ((double)r_diff) / ((double)r_step);
+        int32_t last_r = (int32_t)(r_div * (double)theta_diff);
+
+        for(int32_t theta_diff_iter = 0, theta_iter = 0; theta_iter <= theta_end; r += (this_r_step - prev_r_step), last_r -= (this_r_step - prev_r_step), theta_iter++, theta_diff_iter--)
+        {
+          sincos_array[0] = (double)(theta_init + theta_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final = (uint32_t) ((int64_t)x_init + x_offset);
+          uint32_t y_final = (uint32_t) ((int64_t)y_init - y_offset); // Because (+) is down
+
+          // Now get the parallel pixel
+
+          sincos_array[0] = (double)(theta_last + theta_diff_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset2 = (int64_t) ((double)last_r * sincos_array[0]); // cosine
+          int64_t y_offset2 = (int64_t) ((double)last_r * sincos_array[1]); // sine
+
+          uint32_t x_final2 = (uint32_t) ((int64_t)x_init + x_offset2);
+          uint32_t y_final2 = (uint32_t) ((int64_t)y_init - y_offset2); // Because (+) is down
+
+          // Draw vector has error checks
+
+          // TODO: Something needs to be done here about the gap between pixels
+
+          Draw_vector(GPU, x_final, y_final, x_final2, y_final2, color);
+          prev_r_step = this_r_step;
+          this_r_step = (int32_t)(r_div * ((double)theta_iter));
+          // This is faster than using % or /.
+        }
+      }
+      else
+      {
+
+        for(int32_t theta_diff_iter = 0, theta_iter = 0; theta_iter <= theta_end; theta_iter++, theta_diff_iter--)
+        {
+          sincos_array[0] = (double)(theta_init + theta_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final = (uint32_t) ((int64_t)x_init + x_offset);
+          uint32_t y_final = (uint32_t) ((int64_t)y_init - y_offset); // Because (+) is down
+
+          // Now get the parallel pixel
+
+          sincos_array[0] = (double)(theta_last + theta_diff_iter);
+          quick_sincos_deg(sincos_array);
+
+          int64_t x_offset2 = (int64_t) ((double)r * sincos_array[0]); // cosine
+          int64_t y_offset2 = (int64_t) ((double)r * sincos_array[1]); // sine
+
+          uint32_t x_final2 = (uint32_t) ((int64_t)x_init + x_offset2);
+          uint32_t y_final2 = (uint32_t) ((int64_t)y_init - y_offset2); // Because (+) is down
+
+          // Draw vector has error checks
+
+          // TODO: Something needs to be done here about the gap between pixels
+
+          Draw_vector(GPU, x_final, y_final, x_final2, y_final2, color);
+        }
+      }
+    }
+
+  } // end transparency check
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_rectangle: Draw A Rectangle
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This draws a colored rectangle given (x,y) of the top left corner and side lengths.
+//
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x_init and y_init: (x,y) coordinates on the screen of the rectangle's top left corner, relative to the top left corner of the screen (which is (0,0))
+// x_length and y_length: side lengths (negative flips direction)
+// color: rectangle's color
+//
+
 void Draw_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, INT32 x_length, INT32 y_length, UINT32 color)
 {
   // Draw vector has length checks in it already.
@@ -1771,6 +2045,18 @@ void Draw_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32
   Draw_vector(GPU, x_final, y_final, x_init, y_final, color);
   Draw_vector(GPU, x_init, y_final, x_init, y_init, color);
 }
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_filled_rectangle: Draw A Rectangle And Fill It In
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This draws a colored rectangle given (x,y) of the top left corner and side lengths, and fills it in.
+//
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x_init and y_init: (x,y) coordinates on the screen of the rectangle's top left corner, relative to the top left corner of the screen (which is (0,0))
+// x_length and y_length: side lengths
+// color: rectangle's color
+//
 
 void Draw_filled_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init, UINT32 y_init, UINT32 x_length, UINT32 y_length, UINT32 color)
 {
@@ -1790,13 +2076,465 @@ void Draw_filled_rectangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x_init,
 
   for(uint32_t y = 0; y <= y_length; y++) // Include initial point
   {
-    AVX_memset_4B((void*)(corner_address + y*BytesPerScanline), color, x_length + 1); // Include initial point
+    AVX_memset_4B((UINT32*)(corner_address + y*BytesPerScanline), color, x_length + 1); // Include initial point
     /*
     for(uint32_t x = 0; x <= x_length; x++) // Include initial point
     {
-      *(UINT32*)(corner_address + y*BytesPerScanline + x * 4) = color;
+      *(UINT32*)(corner_address + y*BytesPerScanline + x * 4) = color; // Portable version`
     }
     */
+  }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_quad: Draw A Quad
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This draws a colored quad (think rectangles, square, diamonds, etc.) given 4 corner points. The quad is drawn like this (it
+// doesn't have to be a rectangle):
+/*
+ (x1,y1) --> (x2,y2)
+   /|\          |
+    |          \|/
+ (x4,y4) <-- (x3,y3)
+*/
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x1,y1, x2,y2, x3,y3, and x4, y4: (x,y) coordinates on the screen of each vertex of the quad, relative to the top left corner of the screen (which is (0,0))
+// color: quad's color
+//
+
+void Draw_quad(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 x3, UINT32 y3, UINT32 x4, UINT32 y4, UINT32 color)
+{
+  // Draw vector has out-of-bounds checks in it already
+
+  Draw_vector(GPU, x1, y1, x2, y2, color);
+  Draw_vector(GPU, x2, y2, x3, y3, color);
+  Draw_vector(GPU, x3, y3, x4, y4, color);
+  Draw_vector(GPU, x4, y4, x1, y1, color);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_filled_quad: Draw A Filled Quad
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This draws a colored quad (think rectangles, square, diamonds, etc.) given 4 corner points, and fills it in. The quad is drawn
+// like this (it doesn't have to be a rectangle):
+/*
+ (x1,y1) --> (x2,y2)
+   /|\          |
+    |          \|/
+ (x4,y4) <-- (x3,y3)
+*/
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x1,y1, x2,y2, x3,y3, and x4, y4: (x,y) coordinates on the screen of each vertex of the quad, relative to the top left corner of the screen (which is (0,0))
+// color: quad's color
+//
+// If (x1,y1) and (x3,y3) are not opposite points, unexpected shapes may occur, like a triangle or a quint (|_V_|).
+//
+
+void Draw_filled_quad(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 x3, UINT32 y3, UINT32 x4, UINT32 y4, UINT32 color)
+{
+  // Draw vector has out-of-bounds checks in it already
+  Draw_filled_triangle(GPU, x1, y1, x2, y2, x3, y3, color); // Fill first triangle using points 1,2,3
+  Draw_filled_triangle(GPU, x1, y1, x3, y3, x4, y4, color); // Fill second triangle using points 1,3,4
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_triangle: Draw A Triangle
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This draws a colored triangle given 3 points. The triangle is drawn like this:
+/*
+       (x1,y1)
+      "/\     \
+      /       _\/
+  (x3,y3) <-- (x2,y2)
+*/
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x1,y1, x2,y2, and x3,y3: (x,y) coordinates on the screen of each vertex of the triangle, relative to the top left corner of the screen (which is (0,0))
+// color: triangle's color
+//
+
+void Draw_triangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 x3, UINT32 y3, UINT32 color)
+{
+  // Draw vector has out-of-bounds checks in it already
+
+  Draw_vector(GPU, x1, y1, x2, y2, color);
+  Draw_vector(GPU, x2, y2, x3, y3, color);
+  Draw_vector(GPU, x3, y3, x1, y1, color);
+
+  // Dang, that might've been one of the easiest functions to make, ever.
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Draw_filled_triangle: Draw A Filled Triangle
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This draws a colored triangle given 3 points. The triangle is drawn like this:
+/*
+       (x1,y1)
+      "/\     \
+      /       _\/
+  (x3,y3) <-- (x2,y2)
+*/
+// GPU: GPU to output, e.g. Global_Print_Info.defaultGPU or LP->GPU_Configs->GPUArray[k]
+// x1,y1, x2,y2, and x3,y3: (x,y) coordinates on the screen of each vertex of the triangle, relative to the top left corner of the screen (which is (0,0))
+// color: triangle's color
+//
+
+void Draw_filled_triangle(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 x1, UINT32 y1, UINT32 x2, UINT32 y2, UINT32 x3, UINT32 y3, UINT32 color)
+{
+  // Draw vector has out-of-bounds checks in it already
+
+  //
+  // In a nutshell, triangle fill does something like this:
+  //
+  // (x1,y1)  -->  (x2,y2)
+  //        \\\|///
+  //         \\|//
+  //          \|/
+  //        (x3,y3)
+  //
+  // (But not exactly.)
+  //
+
+  // TODO deal with this one day
+  //
+  // This is not quite 100% perfect, despite being pretty close to it -- draw two different-colored right triangles to
+  // make a square, and then do it again and flip the drawing order, to see why (look at the diagonal line both times).
+  // Compensating for that using this vector method to fill a triangle increases the complexity of this function a lot,
+  // which means it would be slower for triangles whose (x1,y1)->(x2,y2) vector has an angle to it. The overlap does not
+  // occur for stright lines and is a result of approximating a mathematical line with square pixels instead of
+  // infinitesimally small points. Addressing the overlap means determining where (x3,y3) exists in relation to the (x1,y1)
+  // -> (x2,y2) line, and with that information the fill loop can know how to properly account for the "stairstep" in the line.
+  //
+  // For a 45-degree, up-right direction (x1,y1)->(x2,y2) line, that means determining when to fill using this (what is
+  // currently used for all such cases):
+  //
+  /*
+    for(uint64_t y = 0; y < x_dist; y++) // Comparison is not a mistake
+    {
+      Draw_vector(GPU, x1, y1, x3, y3, color);
+      x1 += 1;
+      Draw_vector(GPU, x1, y1, x3, y3, color); // Fill holes
+      y1 -= 1;
+    }
+  */
+  //
+  // Or this:
+  /*
+    for(uint64_t y = 0; y < x_dist; y++) // Comparison is not a mistake
+    {
+      Draw_vector(GPU, x1, y1, x3, y3, color);
+      y1 += 1;
+      Draw_vector(GPU, x1, y1, x3, y3, color); // Fill holes
+      x1 -= 1;
+    }
+  */
+  //
+  // The difference is very subtle: it's just the relative position of the x1 and y1 iterators.
+  //
+  // The problem is that adding all the checks necessary to determine which to use is expensive. Very expensive.
+  // There are 12 possible "zones" around any diagonal line in which (x3,y3) could lie, and they would need to be
+  // checked inside every diagonal case (there are 9 such cases here!). 9 cases x 12 zones = 108 condtional
+  // branches, which isn't just annoying to code but it extends the "worst-case" path down the condtional branch tree
+  // out to something like 6 branches, whereas the current implmentation only has 3.
+  //
+  // So, unless a better idea comes along or the way-too-many-branches method gets implemented, order of triangles drawn matters.
+  //
+
+  if(y2 == y1) // Horizontal line
+  {
+    if(x2 == x1)
+    {
+      Draw_vector(GPU, x1, y2, x3, y3, color); // Vertical line or dot
+    }
+    else if(x2 > x1) // Right direction
+    {
+      uint64_t x_dist = x2 - x1;
+
+      for(uint64_t x = 0; x <= x_dist; x++)
+      {
+        Draw_vector(GPU, x1, y2, x3, y3, color);
+        x1 += 1;
+      }
+    }
+    else // x1 > x2, left direction
+    {
+      uint64_t x_dist = x1 - x2;
+
+      for(uint64_t x = 0; x <= x_dist; x++)
+      {
+        Draw_vector(GPU, x1, y2, x3, y3, color);
+        x1 -= 1;
+      }
+    }
+  }
+
+  else if(y2 > y1) // Down direction
+  {
+    uint64_t y_dist = y2 - y1;
+
+    if(x2 == x1) // Vertical line, down direction
+    {
+      for(uint64_t y = 0; y <= y_dist; y++)
+      {
+        Draw_vector(GPU, x2, y1, x3, y3, color);
+        y1 += 1;
+      }
+    }
+    else if(x2 > x1) // Right direction
+    {
+      uint64_t x_dist = x2 - x1;
+
+      if(y_dist == x_dist) // Straight diagonal, 45 degrees
+      {
+        for(uint64_t y = 0; y <= x_dist; y++) // Comparison is not a mistake
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          x1 += 1;
+          Draw_vector(GPU, x1, y1, x3, y3, color); // Fill holes
+          y1 += 1;
+        }
+      }
+      else if(y_dist > x_dist) // Angle < 45 degrees
+      {
+        double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
+        uint64_t this_step = 0;
+        uint64_t prev_step = 0;
+        uint32_t step_diff = 0;
+
+        for(uint64_t y = 1; (y - 1) < y_dist; y++)
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          prev_step = this_step;
+          this_step = (uint64_t)(((double)y) * slope_step);
+          step_diff = (uint32_t)(this_step - prev_step);
+          x1 += step_diff;
+          if(step_diff)
+          {
+            // Fill in hole
+            Draw_vector(GPU, x1, y1, x3, y3, color);
+          }
+          y1 += 1;
+        }
+      }
+      else // y_dist < x_dist, angle > 45 degrees
+      {
+        double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
+        uint64_t this_step = 0;
+        uint64_t prev_step = 0;
+        uint32_t step_diff = 0;
+
+        for(uint64_t x = 1; (x - 1) < x_dist; x++)
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          prev_step = this_step;
+          this_step = (uint64_t)(((double)x) * slope_step);
+          step_diff = (uint32_t)(this_step - prev_step);
+          y1 += step_diff;
+          if(step_diff)
+          {
+            // Fill in hole
+            Draw_vector(GPU, x1, y1, x3, y3, color);
+          }
+          x1 += 1;
+        }
+      }
+    }
+    else // x1 > x2, left direction
+    {
+      uint64_t x_dist = x1 - x2;
+
+      if(y_dist == x_dist) // Straight diagonal, 45 degrees
+      {
+        for(uint64_t y = 0; y <= x_dist; y++) // Comparison is not a mistake
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          x1 -= 1;
+          Draw_vector(GPU, x1, y1, x3, y3, color); // Fill holes
+          y1 += 1;
+        }
+      }
+      else if(y_dist > x_dist) // Angle < 45 degrees
+      {
+        double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
+        uint64_t this_step = 0;
+        uint64_t prev_step = 0;
+        uint32_t step_diff = 0;
+
+        for(uint64_t y = 1; (y - 1) < y_dist; y++)
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          prev_step = this_step;
+          this_step = (uint64_t)(((double)y) * slope_step);
+          step_diff = (uint32_t)(this_step - prev_step);
+          x1 -= step_diff;
+          if(step_diff)
+          {
+            // Fill in hole
+            Draw_vector(GPU, x1, y1, x3, y3, color);
+          }
+          y1 += 1;
+        }
+      }
+      else // y_dist < x_dist, angle > 45 degrees
+      {
+        double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
+        uint64_t this_step = 0;
+        uint64_t prev_step = 0;
+        uint32_t step_diff = 0;
+
+        for(uint64_t x = 1; (x - 1) < x_dist; x++)
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          prev_step = this_step;
+          this_step = (uint64_t)(((double)x) * slope_step);
+          step_diff = (uint32_t)(this_step - prev_step);
+          y1 += step_diff;
+          if(step_diff)
+          {
+            // Fill in hole
+            Draw_vector(GPU, x1, y1, x3, y3, color);
+          }
+          x1 -= 1;
+        }
+      }
+    }
+  }
+
+  else // y1 > y2, Up direction
+  {
+    uint64_t y_dist = y1 - y2;
+
+    if(x2 == x1) // Vertical line
+    {
+      for(uint64_t y = 0; y <= y_dist; y++)
+      {
+        Draw_vector(GPU, x2, y1, x3, y3, color);
+        y1 -= 1;
+      }
+    }
+    else if(x2 > x1) // Right direction
+    {
+      uint64_t x_dist = x2 - x1;
+
+      if(y_dist == x_dist) // Straight diagonal, 45 degrees
+      {
+        for(uint64_t y = 0; y < x_dist; y++) // Comparison is not a mistake
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          x1 += 1;
+          Draw_vector(GPU, x1, y1, x3, y3, color); // Fill holes
+          y1 -= 1;
+        }
+
+        Draw_vector(GPU, x1, y1, x3, y3, color); // Last one needs to be done separately
+      }
+      else if(y_dist > x_dist) // Angle < 45 degrees
+      {
+        double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
+        uint64_t this_step = 0;
+        uint64_t prev_step = 0;
+        uint32_t step_diff = 0;
+
+        for(uint64_t y = 1; (y - 1) < y_dist; y++)
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          prev_step = this_step;
+          this_step = (uint64_t)(((double)y) * slope_step);
+          step_diff = (uint32_t)(this_step - prev_step);
+          x1 += step_diff;
+          if(step_diff)
+          {
+            // Fill in hole
+            Draw_vector(GPU, x1, y1, x3, y3, color);
+          }
+          y1 -= 1;
+        }
+      }
+      else // y_dist < x_dist, angle > 45 degrees
+      {
+        double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
+        uint64_t this_step = 0;
+        uint64_t prev_step = 0;
+        uint32_t step_diff = 0;
+
+        for(uint64_t x = 1; (x - 1) < x_dist; x++)
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          prev_step = this_step;
+          this_step = (uint64_t)(((double)x) * slope_step);
+          step_diff = (uint32_t)(this_step - prev_step);
+          y1 -= step_diff;
+          if(step_diff)
+          {
+            // Fill in hole
+            Draw_vector(GPU, x1, y1, x3, y3, color);
+          }
+          x1 += 1;
+        }
+      }
+    }
+    else // x1 > x2, left direction
+    {
+      uint64_t x_dist = x1 - x2;
+
+      if(y_dist == x_dist) // Straight diagonal, 45 degrees
+      {
+        for(uint64_t y = 0; y <= x_dist; y++) // Comparison is not a mistake
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          x1 -= 1;
+          Draw_vector(GPU, x1, y1, x3, y3, color); // Fill holes
+          y1 -= 1;
+        }
+      }
+      else if(y_dist > x_dist) // Angle < 45 degrees
+      {
+        double slope_step = ((double)(x_dist + 1)) / ((double)(y_dist + 1));
+        uint64_t this_step = 0;
+        uint64_t prev_step = 0;
+        uint32_t step_diff = 0;
+
+        for(uint64_t y = 1; (y - 1) < y_dist; y++)
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          prev_step = this_step;
+          this_step = (uint64_t)(((double)y) * slope_step);
+          step_diff = (uint32_t)(this_step - prev_step);
+          x1 -= step_diff;
+          if(step_diff)
+          {
+            // Fill in hole
+            Draw_vector(GPU, x1, y1, x3, y3, color);
+          }
+          y1 -= 1;
+        }
+      }
+      else // y_dist < x_dist, angle > 45 degrees
+      {
+        double slope_step = ((double)(y_dist + 1)) / ((double)(x_dist + 1));
+        uint64_t this_step = 0;
+        uint64_t prev_step = 0;
+        uint32_t step_diff = 0;
+
+        for(uint64_t x = 1; (x - 1) < x_dist; x++)
+        {
+          Draw_vector(GPU, x1, y1, x3, y3, color);
+          prev_step = this_step;
+          this_step = (uint64_t)(((double)x) * slope_step);
+          step_diff = (uint32_t)(this_step - prev_step);
+          y1 -= step_diff;
+          if(step_diff)
+          {
+            // Fill in hole
+            Draw_vector(GPU, x1, y1, x3, y3, color);
+          }
+          x1 -= 1;
+        }
+      }
+    }
   }
 }
 
