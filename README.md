@@ -54,7 +54,7 @@ Note that each of these files already has appropriate crediting at the top, so y
 
 ## Building an OS Kernel/Bare-Metal x86-64 Application
 
-The below "How to Build from Source" section contains complete compilation instructions for each platform, and then all you need to do is put your code in "src" and "inc" in place of mine (leave the "startup" folder as-is). Once compiled, your program can be run in the same way as described in the "Releases" section of https://github.com/KNNSpeed/Simple-UEFI-Bootloader using a UEFI-supporting VM like Hyper-V or on actual hardware.
+The below "How to Build from Source" section contains complete compilation instructions for each platform, and then all you need to do is put your code in "src" and "inc" with mine (leave the "startup" folder as-is unless you've looked through the compile scripts & interrupt-related stuff and understand what's in it). Once compiled, your program can be run in the same way as described in the "Releases" section of https://github.com/KNNSpeed/Simple-UEFI-Bootloader using a UEFI-supporting VM like Hyper-V or on actual hardware. Note that the "main" function is called "kernel_main" and is inside Kernel64.c.
 
 ***Important Points to Consider:***
 
