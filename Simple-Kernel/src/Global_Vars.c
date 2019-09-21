@@ -51,12 +51,19 @@
 #include "EfiError.h"
 */
 
+#define TSC_FALLBACK_CYCLES_PER_SEC 30ULL * 100ULL * 1000000ULL
+#define TSC_FALLBACK_CYCLES_PER_MSEC 30ULL * 100ULL * 1000ULL
+#define TSC_FALLBACK_CYCLES_PER_USEC 30ULL * 100ULL
+#define TSC_FALLBACK_CYCLES_PER_100NSEC 30ULL * 10ULL
+#define TSC_FALLBACK_CYCLES_PER_10NSEC 30ULL
+
 //----------------------------------------------------------------------------------------------------------------------------------
 // Core Functionality
 //----------------------------------------------------------------------------------------------------------------------------------
 
 EFI_PHYSICAL_ADDRESS Global_RSDP_Address = ~0ULL;
 ACPI_INTERRUPT_STRUCT Global_ACPI_Interrupt_Table[256] = {0};
+TSC_FREQUENCY_STRUCT Global_TSC_frequency = {TSC_FALLBACK_CYCLES_PER_SEC, TSC_FALLBACK_CYCLES_PER_MSEC, TSC_FALLBACK_CYCLES_PER_USEC, TSC_FALLBACK_CYCLES_PER_100NSEC, TSC_FALLBACK_CYCLES_PER_10NSEC};
 
 //----------------------------------------------------------------------------------------------------------------------------------
 // Text Printing

@@ -94,6 +94,9 @@ __attribute__((target("no-sse"))) void System_Init(LOADER_PARAMS * LP)
   Setup_IDT();
   printf("IDT set.\r\n");
 
+  Initialize_TSC_Freq();
+  printf("TSC frequency set.\r\n");
+
   // Set up the memory map for use with mallocX (X = 16, 32, 64)
   Setup_MemMap();
   printf("MemMap set.\r\n");
@@ -728,6 +731,99 @@ uint8_t Hypervisor_check(void)
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
+// Initialize_TSC_Freq: Load Global Invariant TSC Frequency
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This reads MSR_PLATFORM_INFO and sets the invariant TSC frequency needed for timing functions.
+// If the MSR is empty becuase of, e.g., a VM won't report it, fall back to 3GHz. Things won't be too horribly off since AVX+ CPUs
+// all operate in the 2-5GHz range.
+//
+
+void Initialize_TSC_Freq(void)
+{
+  // 0xCE is MSR_PLATFORM_INFO
+  uint64_t max_non_turbo_ratio = (msr_rw(0xCE, 0, 0) & 0x000000000000FF00) >> 8; // Max non-turbo bus multiplier is in this byte
+
+  if(max_non_turbo_ratio)
+  {
+    // 100 MHz bus for these CPUs, 133 MHz for Nehalem (but Nehalem doesn't have AVX)
+    // That 100MHz includes both AMD and Intel.
+    Global_TSC_frequency.CyclesPerSecond = max_non_turbo_ratio * 100ULL * 1000000ULL;
+    Global_TSC_frequency.CyclesPerMillisecond = max_non_turbo_ratio * 100ULL * 1000ULL;
+    Global_TSC_frequency.CyclesPerMicrosecond = max_non_turbo_ratio * 100ULL; // Isn't it nice that 1 MHz is the exact inverse of 1 usec?
+    Global_TSC_frequency.CyclesPer100ns = max_non_turbo_ratio * 10ULL;
+    Global_TSC_frequency.CyclesPer10ns = max_non_turbo_ratio;
+    printf("Nominal TSC frequency is %llu MHz.\r\n", Global_TSC_frequency.CyclesPerMicrosecond);
+  }
+  else
+  {
+    // Probably in a vm... So...
+    info_printf("Read 0 from MSR_PLATFORM_INFO, falling back to 3GHz for invariant TSC.\r\n");
+    // Initialized to 3GHz in Global_Vars.c
+  }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// ssleep: Sleep for Seconds
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// Wait for the specified time in Seconds
+//
+
+void ssleep(uint64_t Seconds)
+{
+  if(Seconds)
+  {
+    uint64_t cycle_count = 0;
+    uint64_t cycle_count_start = get_tick();
+    while((cycle_count / Global_TSC_frequency.CyclesPerSecond) < Seconds)
+    {
+      cycle_count = get_tick() - cycle_count_start;
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// msleep: Sleep for Milliseconds
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// Wait for the specified time in milliseconds
+//
+
+void msleep(uint64_t Milliseconds)
+{
+  if(Milliseconds)
+  {
+    uint64_t cycle_count = 0;
+    uint64_t cycle_count_start = get_tick();
+    while((cycle_count / Global_TSC_frequency.CyclesPerMillisecond) < Milliseconds)
+    {
+      cycle_count = get_tick() - cycle_count_start;
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// usleep: Sleep for Microseconds
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// Wait for the specified time in microseconds
+//
+
+void usleep(uint64_t Microseconds)
+{
+  if(Microseconds)
+  {
+    uint64_t cycle_count = 0;
+    uint64_t cycle_count_start = get_tick();
+    while((cycle_count / Global_TSC_frequency.CyclesPerMicrosecond) < Microseconds)
+    {
+      cycle_count = get_tick() - cycle_count_start;
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
 // read_perfs_initial: Measure CPU Performance (Part 1 of 2)
 //----------------------------------------------------------------------------------------------------------------------------------
 //
@@ -801,7 +897,7 @@ uint8_t read_perfs_initial(uint64_t * perfs)
 // get_CPU_freq: Measure CPU Performance (Part 2 of 2)
 //----------------------------------------------------------------------------------------------------------------------------------
 //
-// Get CPU frequency in MHz
+// Get CPU frequency in Hz
 // May not work in hypervisors (definitely does not work in Windows 10 Hyper-V), but it's fine on real hardware
 //
 // avg_or_measure: avg freq = 0 (ignores perfs argument), measuring freq during piece of code = 1
@@ -813,6 +909,14 @@ uint8_t read_perfs_initial(uint64_t * perfs)
 
 uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
 {
+  // Check for hypervisor
+  if(__builtin_expect(Hypervisor_check(), 0)) // Using the __builtin_expect() macro described in Draw_arc() in Display.c since this is performance-critical enough to demand it
+  {
+    warning_printf("Hypervisor detected. It's not safe to read CPU frequency MSRs. Returning 0...\r\n");
+    return 0;
+  }
+  // OK, not in a hypervisor; continuing...
+
   uint64_t rax = 0, rbx = 0, rcx = 0, maxleaf = 0;
   uint64_t aperf = 1, mperf = 1; // Don't feel like dealing with division by zero.
   uint64_t rflags = 0, rflags2 = 0;
@@ -835,14 +939,6 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
   }
   else // Avg since reset, or since aperf/mperf overflowed (once every 150-300 years at 2-4 GHz) or were manually zeroed
   {
-    // Check for hypervisor
-    if(Hypervisor_check())
-    {
-      warning_printf("Hypervisor detected. It's not safe to read CPU frequency MSRs. Returning 0...\r\n");
-      return 0;
-    }
-    // OK, not in a hypervisor; continuing...
-
     // Disable maskable interrupts
     rflags = control_register_rw('f', 0, 0);
     rflags2 = rflags & ~(1 << 9); // Clear bit 9
@@ -898,14 +994,8 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
                : "%rbx", "%rcx", "%rdx" // CPUID clobbers all not-explicitly-used abcd registers
              );
 
-  // Needed for Sandy Bridge, Ivy Bridge, and possibly Haswell, Broadwell -- They all have constant TSC found this way.
-  uint64_t max_non_turbo_ratio = (msr_rw(0xCE, 0, 0) & 0x000000000000FF00) >> 8; // Max non-turbo bus multiplier is in this byte
-  uint64_t tsc_frequency = max_non_turbo_ratio * 100ULL; // 100 MHz bus for these CPUs, 133 MHz for Nehalem (but Nehalem doesn't have AVX)
-  // NOTE: Multiplying tsc_frequency by 100MHz means the number will be something like 2600 MHz, e.g. this multiplication factor determines the unit.
-
 // DEBUG:
 //  printf("aperf: %qu, mperf: %qu\r\n", aperf, mperf);
-//  printf("Nonturbo-ratio: %qu, tsc MHz: %qu\r\n", max_non_turbo_ratio, tsc_frequency);
 
   if(maxleaf >= 0x15)
   {
@@ -922,7 +1012,7 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
       // rcx is nominal frequency of clock in Hz
       // TSC freq (in Hz) from Crystal OSC = (rcx * rbx)/rax
       // Intel's CPUID reference does not make it clear that ebx/eax is TSC's *frequency* / Core crystal clock
-      return ((rcx/1000000ULL) * rbx * aperf)/(rax * mperf); // MHz
+      return ((rcx * rbx * aperf)/(rax * mperf)); // Hz
     }
     // (rbx/rax) is (TSC/core crystal clock), so rbx/rax is to nominal crystal
     // clock (in rcx in rcx != 0) as aperf/mperf is to max frequency (that is to
@@ -945,15 +1035,18 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
       // It's also in Intel SDM, Vol. 3, Ch. 18.7.3
       if( (maxleafmask == 0x906E0) || (maxleafmask == 0x806E0) || (maxleafmask == 0x506E0) || (maxleafmask == 0x406E0) )
       {
-        return (24 * rbx * aperf)/(rax * mperf); // MHz
+        return (24000000ULL * rbx * aperf)/(rax * mperf); // Hz
       }
       // Else: Argh...
     }
   }
   // At this point CPUID won't help.
 
+  // Needed for Sandy Bridge, Ivy Bridge, and possibly Haswell, Broadwell -- They all have constant TSC found this way.
+  // NOTE: Multiplying tsc_frequency by 100MHz means the number will be something like 2600 MHz, e.g. this multiplication factor determines the unit.
+
   // Freq = TSCFreq * delta(APERF)/delta(MPERF)
-  uint64_t frequency = (tsc_frequency * aperf) / mperf; // CPUID didn't help, so fall back to Sandy Bridge method.
+  uint64_t frequency = (Global_TSC_frequency.CyclesPerSecond * aperf) / mperf; // CPUID didn't help, so fall back to Sandy Bridge method.
 
   // All done, so re-enable maskable interrupts
   // It is possible that RFLAGS changed since it was last read...

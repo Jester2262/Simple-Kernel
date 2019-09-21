@@ -563,54 +563,12 @@ ACPI_STATUS AcpiOsExecute(ACPI_EXECUTE_TYPE Type, ACPI_OSD_EXEC_CALLBACK Functio
 
 void AcpiOsSleep(UINT64 Milliseconds)
 {
-  if(Milliseconds)
-  {
-    // 0xCE is MSR_PLATFORM_INFO
-    uint64_t max_non_turbo_ratio = (msr_rw(0xCE, 0, 0) & 0x000000000000FF00) >> 8; // Max non-turbo bus multiplier is in this byte
-    // Want tsc_frequency in cycles/millisec
-    // Isn't it nice that 1 MHz is the exact inverse of 1 usec?
-    uint64_t tsc_frequency = max_non_turbo_ratio * 100ULL * 1000ULL; // 100 MHz bus for these CPUs, 133 MHz for Nehalem (but Nehalem doesn't have AVX)
-    // Need it in units of Hz.
-
-    if(!tsc_frequency)
-    {
-      // probably in a vm... So...
-      tsc_frequency = 30ULL * 100ULL * 1000ULL; // Let's just say 3GHz, so 3 000 000 cycles/msec
-    }
-
-    uint64_t cycle_count = 0;
-    uint64_t cycle_count_start = get_tick();
-    while((cycle_count / tsc_frequency) < Milliseconds)
-    {
-      cycle_count = get_tick() - cycle_count_start;
-    }
-  }
+  msleep(Milliseconds);
 }
 
 void AcpiOsStall(UINT32 Microseconds)
 {
-  if(Microseconds)
-  {
-    // 0xCE is MSR_PLATFORM_INFO
-    uint64_t max_non_turbo_ratio = (msr_rw(0xCE, 0, 0) & 0x000000000000FF00) >> 8; // Max non-turbo bus multiplier is in this byte
-    // Want tsc_frequency in cycles/microsec
-    // Isn't it nice that 1 MHz is the exact inverse of 1 usec?
-    uint64_t tsc_frequency = max_non_turbo_ratio * 100ULL; // 100 MHz bus for these CPUs, 133 MHz for Nehalem (but Nehalem doesn't have AVX)
-    // Need it in units of Hz.
-
-    if(!tsc_frequency)
-    {
-      // probably in a vm... So...
-      tsc_frequency = 30ULL * 100ULL; // Let's just say 3GHz, so 3000 cycles/usec
-    }
-
-    uint64_t cycle_count = 0;
-    uint64_t cycle_count_start = get_tick();
-    while((cycle_count / tsc_frequency) < Microseconds)
-    {
-      cycle_count = get_tick() - cycle_count_start;
-    }
-  }
+  usleep((uint64_t)Microseconds);
 }
 
 void AcpiOsWaitEventsComplete(void)
@@ -1002,7 +960,7 @@ void AcpiOsRedirectOutput(void *Destination)
 #else
   UNUSED(Destination);
 
-  warning_printf("Unimplemented AcpiOsRedirectOutput called\r\n");
+  warning_printf("Warning: AcpiOsRedirectOutput called, but there's nowhere to redirect the output.\r\n");
 #endif
 }
 
@@ -1047,48 +1005,29 @@ ACPI_STATUS AcpiOsGetTableByName(char *Signature, UINT32 Instance, ACPI_TABLE_HE
 // 9.11 Miscellaneous
 UINT64 AcpiOsGetTimer(void)
 {
-/* // This gives frequency in cycles/sec
-  // 0xCE is MSR_PLATFORM_INFO
-  uint64_t max_non_turbo_ratio = (msr_rw(0xCE, 0, 0) & 0x000000000000FF00) >> 8; // Max non-turbo bus multiplier is in this byte
-  uint64_t tsc_frequency = max_non_turbo_ratio * 100ULL * 1000000ULL; // 100 MHz bus for these CPUs, 133 MHz for Nehalem (but Nehalem doesn't have AVX)
-  // Need it in units of Hz.
-
-  if(!tsc_frequency)
-  {
-    // probably in a vm... So...
-    tsc_frequency = 30ULL * 100ULL * 1000000ULL; // Let's just say 3GHz
-  }
-*/
-  // 0xCE is MSR_PLATFORM_INFO
-  uint64_t max_non_turbo_ratio = (msr_rw(0xCE, 0, 0) & 0x000000000000FF00) >> 8; // Max non-turbo bus multiplier is in this byte
-  // Want cycles per 100 nsec
-  uint64_t tsc_frequency = max_non_turbo_ratio * 10ULL; // 100 MHz bus for these CPUs, 133 MHz for Nehalem (but Nehalem doesn't have AVX)
-  // Need it in units of Hz.
-
-  if(!tsc_frequency)
-  {
-    // probably in a vm... So...
-    tsc_frequency = 30ULL * 10ULL; // Let's just say 3GHz, or 300 cycles / 100 nsec
-  }
-
   uint64_t cycle_count = get_tick();
-  // NOTE: Hope this doesn't break in hypervisors!
 
-  return (cycle_count / tsc_frequency);
+  return (cycle_count / Global_TSC_frequency.CyclesPer100ns);
 }
 
 ACPI_STATUS AcpiOsSignal(UINT32 Function, void *Info)
 {
   // Neither Windows nor Linux do anything here.
-  UNUSED(Info);
+  // Oh well.
 
   switch(Function)
   {
     case ACPI_SIGNAL_FATAL:
+      error_printf("Got FATAL signal from ACPI. Halting.\r\n");
+      info_printf("Signal details: Type: %#x, Code: %#x, Argument: %#x\r\n", ((ACPI_SIGNAL_FATAL_INFO*)Info)->Type, ((ACPI_SIGNAL_FATAL_INFO*)Info)->Code, ((ACPI_SIGNAL_FATAL_INFO*)Info)->Argument);
+      asm volatile ("hlt");
       break;
     case ACPI_SIGNAL_BREAKPOINT:
+      info_printf("ACPI Breakpoint signal. %s\r\n", (char*)Info); // It's a message like this: "Executed AML Breakpoint opcode"
+      // Do whatever one might want to do upon hitting an ACPI breakpoint opcode
       break;
     default:
+      warning_printf("Warning: Unknown signal type received from ACPI.\r\n");
       break;
   }
 

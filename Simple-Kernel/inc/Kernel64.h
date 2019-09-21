@@ -456,6 +456,14 @@ typedef struct {
   UINT32                             textscrollmode;   // What to do when a newline goes off the bottom of the screen: 0 = scroll entire screen, 1 = wrap around to the top
 } GLOBAL_PRINT_INFO_STRUCT;
 
+typedef struct {
+  UINT64 CyclesPerSecond;
+  UINT64 CyclesPerMillisecond;
+  UINT64 CyclesPerMicrosecond;
+  UINT64 CyclesPer100ns;
+  UINT64 CyclesPer10ns;
+} TSC_FREQUENCY_STRUCT;
+
 // Intel Architecture Manual Vol. 3A, Fig. 3-11 (Pseudo-Descriptor Formats)
 typedef struct __attribute__ ((packed)) {
   UINT16 Limit; // Limit + 1 = size, since limit + base = the last valid address
@@ -636,6 +644,7 @@ typedef struct __attribute__((packed)) {
 
 extern EFI_PHYSICAL_ADDRESS Global_RSDP_Address;
 extern ACPI_INTERRUPT_STRUCT Global_ACPI_Interrupt_Table[256];
+extern TSC_FREQUENCY_STRUCT Global_TSC_frequency;
 extern GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info;
 extern GLOBAL_PRINT_INFO_STRUCT Global_Print_Info;
 
@@ -656,6 +665,10 @@ void Enable_Maskable_Interrupts(void); // Exceptions and Non-Maskable Interrupts
 void Enable_HWP(void);
 void Find_RSDP(LOADER_PARAMS * LP);
 uint8_t Hypervisor_check(void);
+void Initialize_TSC_Freq(void);
+void ssleep(uint64_t Seconds);
+void msleep(uint64_t Milliseconds);
+void usleep(uint64_t Microseconds);
 uint8_t read_perfs_initial(uint64_t * perfs);
 uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure);
 
