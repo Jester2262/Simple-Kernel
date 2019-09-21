@@ -29,7 +29,6 @@
 #include <stdint.h>
 #include <float.h>
 #include <stdarg.h>
-
 //#include <cpuid.h> // ...We also have this. Don't need it, though.
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -47,10 +46,7 @@
 typedef EFI_GUID GUID; // Defining it here instead. This allows SmBios.h to be replaced with an updated version without modification.
 #include "SmBios.h"
 
-#include "avxmem.h"
 #include "ISR.h"
-
-//#include <acpi.h>
 
 // GRAPHICS
 typedef struct {
@@ -559,6 +555,8 @@ typedef struct __attribute__ ((packed)) {
 typedef struct {
   uint64_t               PageTableEntryData;
   uint64_t               HWPageSize;
+  uint64_t               HWPageShift;
+  uint64_t               HWPageBase;
   uint64_t               WholePageInRegion;
   EFI_MEMORY_DESCRIPTOR  MemoryMapRegionData;
 } PAGE_ENTRY_INFO_STRUCT;
@@ -585,6 +583,19 @@ typedef struct {
 #define PML1_SHIFT 12
 
 // ACPI Structures
+
+// ACPI Component Architecture User Guide and Programmer Reference 6.2, section 9.5.1.1 (Interface to OS-independent Interrupt Handlers)
+typedef UINT32 ACPI_STATUS;
+// Interrupt function pointer
+typedef UINT32 (*ACPI_OSD_HANDLER) (void *Context);
+
+// ACPI (Custom)
+typedef struct {
+  UINT32            InterruptNumber;
+  ACPI_OSD_HANDLER  HandlerPointer; // This is a function pointer
+  void             *Context; // This is a pointer
+} ACPI_INTERRUPT_STRUCT;
+
 // ACPI Specification 6.2A, section 5.2.5 (Root System Description Pointer (RSDP))
 typedef struct __attribute__((packed)) {
   char      Signature[8]; // "RSD PTR " with trailing space
@@ -623,6 +634,8 @@ typedef struct __attribute__((packed)) {
 // Global Variables
 //----------------------------------------------------------------------------------------------------------------------------------
 
+extern EFI_PHYSICAL_ADDRESS Global_RSDP_Address;
+extern ACPI_INTERRUPT_STRUCT Global_ACPI_Interrupt_Table[256];
 extern GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info;
 extern GLOBAL_PRINT_INFO_STRUCT Global_Print_Info;
 
@@ -641,6 +654,7 @@ void HaCF(void); // Note: this is at the very bottom of System.c
 void Enable_AVX(void);
 void Enable_Maskable_Interrupts(void); // Exceptions and Non-Maskable Interrupts are always enabled.
 void Enable_HWP(void);
+void Find_RSDP(LOADER_PARAMS * LP);
 uint8_t Hypervisor_check(void);
 uint8_t read_perfs_initial(uint64_t * perfs);
 uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure);
@@ -671,7 +685,7 @@ char * Get_Manufacturer_ID(char * Manufacturer_ID); // "Manufacturer_ID" must be
 void cpu_features(uint64_t rax_value, uint64_t rcx_value);
 
  // For interrupt handling
-void User_ISR_handler(INTERRUPT_FRAME * i_frame);
+void User_ISR_handler(INTERRUPT_FRAME * i_frame); // ACPI uses this, too
 void CPU_ISR_handler(INTERRUPT_FRAME * i_frame);
 void CPU_EXC_handler(EXCEPTION_FRAME * e_frame);
 
@@ -735,6 +749,7 @@ void MergeContiguousConventionalMemory(void);
 EFI_PHYSICAL_ADDRESS ZeroAllConventionalMemory(void);
 uint64_t MemMap_Prep(uint64_t num_additional_descriptors);
 EFI_PHYSICAL_ADDRESS pagetable_alloc(uint64_t pagetables_size);
+EFI_PHYSICAL_ADDRESS null_alloc(void);
 
   // For physical addresses
 __attribute__((malloc)) void * malloc(size_t numbytes);
@@ -819,10 +834,14 @@ void formatted_string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UIN
 void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
 
 // Printf-related functions (Print.c)
+
+#ifndef ACKERNEL64
+// These 3 conflict with ACPICA's internal versions, so special case them
+int sprintf(char *buf, const char *cfmt, ...);
 int snprintf(char *str, size_t size, const char *format, ...);
 int vsnprintf(char *str, size_t size, const char *format, va_list ap);
+#endif /* ACKERNEL64 */
 int vsnrprintf(char *str, size_t size, int radix, const char *format, va_list ap);
-int sprintf(char *buf, const char *cfmt, ...);
 int vsprintf(char *buf, const char *cfmt, va_list ap);
 
 int printf(const char *fmt, ...);
@@ -836,6 +855,13 @@ int info_printf(const char *fmt, ...);
 
 void print_utf16_as_utf8(CHAR16 * strung, UINT64 size);
 char * UCS2_to_UTF8(CHAR16 * strang, UINT64 size);
+
+ACPI_STATUS InitializeFullAcpi(void);
+ACPI_STATUS Quit_ACPI(void);
+ACPI_STATUS InitializeAcpiTablesOnly(void);
+ACPI_STATUS InitializeAcpiAfterTables(void);
+void ACPI_Shutdown(void);
+void ACPI_Standby(void);
 
 // Don't remove this #endif
 #endif /* _Kernel64_H */

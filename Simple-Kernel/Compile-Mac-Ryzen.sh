@@ -80,12 +80,12 @@ done < $CurDir/h_files.txt
 # Loop through and compile the backend .c files, which are listed in c_files_mac.txt
 #
 
-#set -v
-#while read f; do
-#  echo "gcc" -march=znver1 -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
-#  "gcc" -march=znver1 -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
-#done < $CurDir/c_files_mac.txt
-#set +v
+set -v
+while read f; do
+  echo "gcc" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=znver1 -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
+  "gcc" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=znver1 -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
+done < $CurDir/c_files_mac.txt
+set +v
 
 #
 # Compile the .c files in the startup folder
@@ -133,9 +133,9 @@ set +v
 # forward slashes) locations of compiled Backend .o files
 #
 
-#while read f; do
-#  echo "${f%.*}.o" | tee -a objects.list
-#done < $CurDir/c_files_mac.txt
+while read f; do
+  echo "${f%.*}.o" | tee -a objects.list
+done < $CurDir/c_files_mac.txt
 
 #
 # Add compiled .o files from the startup directory to objects.list
@@ -165,9 +165,9 @@ done
 # Also Pagezero protections don't work without virtual memory!!
 
 # "gcc" -nostdlib -T$LinkerScript -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-static -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64-Ryzen.mach64" @"objects.list" # LC_UNIXTHREAD, used by Mac's own kernel
+# "gcc" -nostdlib -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64-Ryzen.mach64" @"objects.list" -lSystem # LC_MAIN, requires DYLD
 set -v
 "gcc" -nostdlib -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-static -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64-Ryzen.mach64" @"objects.list" # LC_UNIXTHREAD, used by Mac's own kernel
-#"gcc" -nostdlib -Wl,-e,_kernel_main -Wl,-dead_strip -Wl,-pie -Wl,-map,output.map -Wl,-pagezero_size,0x0 -o "Kernel64-Ryzen.mach64" @"objects.list" -lSystem # LC_MAIN, requires DYLD
 "strip" "Kernel64-Ryzen.mach64"
 set +v
 # Comment the above strip command to keep debug symbols in the output binary.

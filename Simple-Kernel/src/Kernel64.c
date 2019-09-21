@@ -61,9 +61,8 @@
 // up to the GPU firmware maker to deterrmine that. See "12.10 Rules for PCI/AGP Devices" in the UEFI Specification 2.7 Errata A for more
 // details: http://www.uefi.org/specifications
 //
-
 #include "Kernel64.h"
-
+#include "avxmem.h"
 
 // Stack size defined in number of bytes, e.g. (1 << 12) is 4kiB, (1 << 20) is 1MiB
 #define STACK_SIZE (1ULL << 20)
@@ -207,7 +206,6 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   Get_Manufacturer_ID(Manufacturer_ID); // Returns a char* pointer to Manufacturer_ID. Don't need it here, though.
   printf("%s\r\n\n", Manufacturer_ID);
 
-//  print_system_memmap();
   printf("Total EfiConventionalMemory: %llu\r\n", GetFreeSystemRam());
   printf("Total Installed RAM: %qu\r\n", GetInstalledSystemRam(LP->ConfigTables, LP->Number_of_ConfigTables));
 
@@ -216,10 +214,12 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   free(brandstring);
   free(Manufacturer_ID);
 
-  print_system_memmap();
+//  print_system_memmap();
 
   uint64_t end_time = get_tick();
   printf("Result: start: %qu end: %qu diff: %qu\r\n", start_time, end_time, end_time - start_time);
+
+  asm volatile ("hlt");
 
   Draw_vector(Global_Print_Info.defaultGPU, 500, 500, 500, 700, 0x000000FF); // |
   Draw_vector(Global_Print_Info.defaultGPU, 500, 500, 700, 500, 0x000000FF); // --
@@ -469,72 +469,8 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   Global_Print_Info.yscale = 1; // Output scale for systemfont used by printf
   Global_Print_Info.textscrollmode = Global_Print_Info.height*Global_Print_Info.yscale; // Readjust quick scrolling
 
-  // Search for ACPI tables
-  uint8_t RSDPfound = 0;
-  uint64_t RSDP_index = 0;
-  printf("\r\nAcpi20GUID: %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\r\n",
-          Acpi20TableGuid.Data1,
-          Acpi20TableGuid.Data2,
-          Acpi20TableGuid.Data3,
-          Acpi20TableGuid.Data4[0],
-          Acpi20TableGuid.Data4[1],
-          Acpi20TableGuid.Data4[2],
-          Acpi20TableGuid.Data4[3],
-          Acpi20TableGuid.Data4[4],
-          Acpi20TableGuid.Data4[5],
-          Acpi20TableGuid.Data4[6],
-          Acpi20TableGuid.Data4[7]
-        );
-
-//  printf("%#qx\r\n", Acpi20TableGuid);
-
-  for(uint64_t i1 = 0; i1 < LP->Number_of_ConfigTables; i1++)
-  {
-    printf("Table %llu GUID: %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\r\n", i1,
-            LP->ConfigTables[i1].VendorGuid.Data1,
-            LP->ConfigTables[i1].VendorGuid.Data2,
-            LP->ConfigTables[i1].VendorGuid.Data3,
-            LP->ConfigTables[i1].VendorGuid.Data4[0],
-            LP->ConfigTables[i1].VendorGuid.Data4[1],
-            LP->ConfigTables[i1].VendorGuid.Data4[2],
-            LP->ConfigTables[i1].VendorGuid.Data4[3],
-            LP->ConfigTables[i1].VendorGuid.Data4[4],
-            LP->ConfigTables[i1].VendorGuid.Data4[5],
-            LP->ConfigTables[i1].VendorGuid.Data4[6],
-            LP->ConfigTables[i1].VendorGuid.Data4[7]
-          );
-
-    if(!(AVX_memcmp(&LP->ConfigTables[i1].VendorGuid, &Acpi20TableGuid, 16, 0)))
-    {
-      printf("RSDP 2.0 found!\r\n");
-      RSDP_index = i1;
-      RSDPfound = 2;
-      break;
-    }
-  }
-  // If no RSDP 2.0, check for 1.0
-  if(!RSDPfound)
-  {
-    for(uint64_t i2 = 0; i2 < LP->Number_of_ConfigTables; i2++)
-    {
-      if(!(AVX_memcmp(&LP->ConfigTables[i2].VendorGuid, &Acpi10TableGuid, 16, 0)))
-      {
-        printf("RSDP 1.0 found!\r\n");
-        RSDP_index = i2;
-        RSDPfound = 1;
-        break;
-      }
-    }
-  }
-
-  if(!RSDPfound)
-  {
-    printf("Invalid system: no RSDP.\r\n");
-    HaCF();
-  }
-
   int is_hardware_reduced_ACPI = 0;
-  XSDT_STRUCT * xsdt = (XSDT_STRUCT*) ((RSDP_20_STRUCT *)LP->ConfigTables[RSDP_index].VendorTable)->XSDTAddress;
+  XSDT_STRUCT * xsdt = (XSDT_STRUCT*) ((RSDP_20_STRUCT *)Global_RSDP_Address)->XSDTAddress;
 
   for(uint64_t i3 = 0; i3 < ((xsdt->SDTHeader.Length - sizeof(SDT_HEADER_STRUCT)) >> 3); i3++)
   {
@@ -561,31 +497,19 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   // is squarely a firmware fault. This is why:
   // https://docs.microsoft.com/en-us/windows-hardware/design/device-experiences/oem-uefi#runtime-requirements
   // So GetTime(), SetTime(), and UpdateCapsule() all have the potential to be equally affected, because they aren't strictly needed by Windows.
-/*  if(is_hardware_reduced_ACPI) // Check HW_REDUCED_ACPI Flag in FADT, as HW-reduced ACPI mode uses EFI shutdown
+
+  if(is_hardware_reduced_ACPI) // Check HW_REDUCED_ACPI Flag in FADT, as HW-reduced ACPI mode uses EFI shutdown
   {
     LP->RTServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL); // Shutdown the system
   }
   else
   {
-    asm volatile ("hlt");
-    // ACPI shutdown
+    ACPI_Shutdown();
 
-    printf("Entering ACPI S5 state (shutting down...)\r\n");
-    ACPI_STATUS Acpi_Sleep_Status = AcpiEnterSleepStatePrep(ACPI_STATE_S5); // This handles all the TypeA and TypeB stuff
-    if(ACPI_SUCCESS(Acpi_Sleep_Status)) // We have S5
-    {
-      // ACPI S5 method
-      asm volatile ("cli");
-      AcpiEnterSleepState(ACPI_STATE_S5); // Should shut down here.
+    // Well if that didn't work...
+    LP->RTServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL); // Shutdown the system
+  }
 
-      // Well if that didn't work...
-      LP->RTServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL); // Shutdown the system
-    }
-    else // If no S5, resort to UEFI
-    {
-      LP->RTServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL); // Shutdown the system
-    }
-  }*/
   error_printf("What? Can this thing not shut down on its own?? Please force power off.\r\n");
   HaCF();
 }

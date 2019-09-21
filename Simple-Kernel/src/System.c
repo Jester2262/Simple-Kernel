@@ -16,6 +16,7 @@
 //
 
 #include "Kernel64.h"
+#include "avxmem.h"
 
 static void cs_update(void);
 static void set_interrupt_entry(uint64_t isr_num, uint64_t isr_addr);
@@ -111,11 +112,30 @@ __attribute__((target("no-sse"))) void System_Init(LOADER_PARAMS * LP)
 
   // HWP
   Enable_HWP();
+  // It has a printf in it
 
-  // Enable Maskable Interrupts TODO
+  // ACPI
+  Find_RSDP(LP);
+  printf("Global RSDP found and set. Address: %#qx\r\n", Global_RSDP_Address);
+
+  // TODO enabling multicore stuff goes here, before interrupts
+//  print_system_memmap();
+//  HaCF();
+  // Enable Maskable Interrupts
   // Exceptions and Non-Maskable Interrupts are always enabled.
-  // Enable_Maskable_Interrupts() here
+//  Enable_Maskable_Interrupts();
+  // It has a printf in it
 
+ // This will make more sense after multicore is implemented.
+  ACPI_STATUS ACPIInitStatus = InitializeFullAcpi();
+//  ACPI_STATUS ACPIInitStatus = InitializeAcpiTablesOnly();
+//  ACPIInitStatus = InitializeAcpiAfterTables();
+  if(ACPIInitStatus)
+  {
+    error_printf("ACPI Init Error %#x\r\n", ACPIInitStatus);
+    HaCF();
+  }
+  printf("ACPI Mode Enabled\r\n");
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -602,6 +622,84 @@ void Enable_HWP(void)
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
+// Find_RSDP: Locate The RSDP Address for ACPI
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// Given the loader parameters, find the Root System Descriptor Ponter (RSDP) so that ACPI can be used.
+//
+
+void Find_RSDP(LOADER_PARAMS * LP)
+{
+  // Search for ACPI tables
+  uint8_t RSDPfound = 0;
+  uint64_t RSDP_index = 0;
+  printf("\r\nAcpi20GUID: %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\r\n",
+          Acpi20TableGuid.Data1,
+          Acpi20TableGuid.Data2,
+          Acpi20TableGuid.Data3,
+          Acpi20TableGuid.Data4[0],
+          Acpi20TableGuid.Data4[1],
+          Acpi20TableGuid.Data4[2],
+          Acpi20TableGuid.Data4[3],
+          Acpi20TableGuid.Data4[4],
+          Acpi20TableGuid.Data4[5],
+          Acpi20TableGuid.Data4[6],
+          Acpi20TableGuid.Data4[7]
+        );
+
+//  printf("%#qx\r\n", Acpi20TableGuid);
+
+  for(uint64_t i1 = 0; i1 < LP->Number_of_ConfigTables; i1++)
+  {
+    printf("Table %llu GUID: %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\r\n", i1,
+            LP->ConfigTables[i1].VendorGuid.Data1,
+            LP->ConfigTables[i1].VendorGuid.Data2,
+            LP->ConfigTables[i1].VendorGuid.Data3,
+            LP->ConfigTables[i1].VendorGuid.Data4[0],
+            LP->ConfigTables[i1].VendorGuid.Data4[1],
+            LP->ConfigTables[i1].VendorGuid.Data4[2],
+            LP->ConfigTables[i1].VendorGuid.Data4[3],
+            LP->ConfigTables[i1].VendorGuid.Data4[4],
+            LP->ConfigTables[i1].VendorGuid.Data4[5],
+            LP->ConfigTables[i1].VendorGuid.Data4[6],
+            LP->ConfigTables[i1].VendorGuid.Data4[7]
+          );
+
+    if(!(AVX_memcmp(&LP->ConfigTables[i1].VendorGuid, &Acpi20TableGuid, 16, 0)))
+    {
+      printf("RSDP 2.0 found!\r\n");
+      RSDP_index = i1;
+      RSDPfound = 2;
+      break;
+    }
+  }
+  // If no RSDP 2.0, check for 1.0
+  if(!RSDPfound)
+  {
+    for(uint64_t i2 = 0; i2 < LP->Number_of_ConfigTables; i2++)
+    {
+      if(!(AVX_memcmp(&LP->ConfigTables[i2].VendorGuid, &Acpi10TableGuid, 16, 0)))
+      {
+        printf("RSDP 1.0 found!\r\n");
+        RSDP_index = i2;
+        RSDPfound = 1;
+        break;
+      }
+    }
+  }
+
+  if(!RSDPfound)
+  {
+    printf("Invalid system: no RSDP.\r\n");
+    HaCF();
+  }
+
+  Global_RSDP_Address = (EFI_PHYSICAL_ADDRESS)(LP->ConfigTables[RSDP_index].VendorTable);
+
+  // Done!
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
 // Hypervisor_check: Are We Virtualized?
 //----------------------------------------------------------------------------------------------------------------------------------
 //
@@ -802,7 +900,8 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
 
   // Needed for Sandy Bridge, Ivy Bridge, and possibly Haswell, Broadwell -- They all have constant TSC found this way.
   uint64_t max_non_turbo_ratio = (msr_rw(0xCE, 0, 0) & 0x000000000000FF00) >> 8; // Max non-turbo bus multiplier is in this byte
-  uint64_t tsc_frequency = max_non_turbo_ratio * 100; // 100 MHz bus for these CPUs, 133 MHz for Nehalem (but Nehalem doesn't have AVX)
+  uint64_t tsc_frequency = max_non_turbo_ratio * 100ULL; // 100 MHz bus for these CPUs, 133 MHz for Nehalem (but Nehalem doesn't have AVX)
+  // NOTE: Multiplying tsc_frequency by 100MHz means the number will be something like 2600 MHz, e.g. this multiplication factor determines the unit.
 
 // DEBUG:
 //  printf("aperf: %qu, mperf: %qu\r\n", aperf, mperf);
@@ -823,7 +922,7 @@ uint64_t get_CPU_freq(uint64_t * perfs, uint8_t avg_or_measure)
       // rcx is nominal frequency of clock in Hz
       // TSC freq (in Hz) from Crystal OSC = (rcx * rbx)/rax
       // Intel's CPUID reference does not make it clear that ebx/eax is TSC's *frequency* / Core crystal clock
-      return ((rcx/1000000) * rbx * aperf)/(rax * mperf); // MHz
+      return ((rcx/1000000ULL) * rbx * aperf)/(rax * mperf); // MHz
     }
     // (rbx/rax) is (TSC/core crystal clock), so rbx/rax is to nominal crystal
     // clock (in rcx in rcx != 0) as aperf/mperf is to max frequency (that is to
@@ -887,44 +986,54 @@ uint32_t portio_rw(uint16_t port_address, uint32_t data, uint8_t size, uint8_t r
 {
   if(size == 1)
   {
+    // data is 8 bits
+    uint8_t data8 = (uint8_t)data;
+
     if(rw == 1) // Write
     {
       asm volatile("outb %[value], %[address]" // GAS syntax (src, dest) is opposite Intel syntax (dest, src)
                     : // No outputs
-                    : [value] "a" ((uint8_t)data), [address] "d" (port_address)
+                    : [value] "a" (data8), [address] "d" (port_address)
                     : // No clobbers
                   );
     }
     else // Read
     {
       asm volatile("inb %[address], %[value]"
-                    : // No outputs
-                    : [value] "a" ((uint8_t)data), [address] "d" (port_address)
+                    : [value] "=a" (data8)
+                    : [address] "d" (port_address)
                     : // No clobbers
                   );
+      data = (uint32_t)data8;
     }
   }
   else if(size == 2)
   {
+    // data is 16 bits
+    uint16_t data16 = (uint16_t)data;
+
     if(rw == 1) // Write
     {
       asm volatile("outw %[value], %[address]"
                     : // No outputs
-                    : [value] "a" ((uint16_t)data), [address] "d" (port_address)
+                    : [value] "a" (data16), [address] "d" (port_address)
                     : // No clobbers
                   );
     }
     else // Read
     {
       asm volatile("inw %[address], %[value]"
-                    : // No outputs
-                    : [value] "a" ((uint16_t)data), [address] "d" (port_address)
+                    : [value] "=a" (data16)
+                    : [address] "d" (port_address)
                     : // No clobbers
                   );
+      data = (uint32_t)data16;
     }
   }
   else if(size == 4)
   {
+    // data is 32 bits
+
     if(rw == 1) // Write
     {
       asm volatile("outl %[value], %[address]"
@@ -936,8 +1045,8 @@ uint32_t portio_rw(uint16_t port_address, uint32_t data, uint8_t size, uint8_t r
     else // Read
     {
       asm volatile("inl %[address], %[value]"
-                    : // No outputs
-                    : [value] "a" (data), [address] "d" (port_address)
+                    : [value] "=a" (data)
+                    : [address] "d" (port_address)
                     : // No clobbers
                   );
     }
@@ -2957,35 +3066,45 @@ void User_ISR_handler(INTERRUPT_FRAME * i_frame)
               );
 
   // OK, since xsave has been called we can now safely use AVX instructions in this interrupt--up until xrstor is called, at any rate.
-  // Using an interrupt gate in the IDT means we won't get preempted now, either, which would wreck the xsave area.
+  // Using an interrupt gate in the IDT means we won't get preempted now by other user ISRs, either, which would wreck the xsave area.
 
-  switch(i_frame->isr_num)
-  {
-
-    //
-    // User-Defined Interrupts (32-255)
-    //
-
-//    case 32: // Minimum allowed user-defined case number
-//    // Case 32 code
-//      break;
-//    ....
-//    case 255: // Maximum allowed case number
-//    // Case 255 code
-//      break;
-
-    //
-    // End of User-Defined Interrupts
-    //
-
-    default:
-      error_printf("User_ISR_handler: Unhandled Interrupt! IDT Entry: %#qu\r\n", i_frame->isr_num);
-      ISR_regdump(i_frame);
-      AVX_regdump((XSAVE_AREA_LAYOUT*)user_xsave_space);
-      asm volatile("hlt");
-      break;
+  // First check: Was this called by ACPI?
+  // ACPI gets priority over whatever interrupt it decides to claim, until it stops using that interrupt, in which case the interrupt
+  // goes back to whatever it was being used for before ACPI claimed it. Basically this grants ACPI a temporary override of whatever
+  // interrupt it wants.
+  if(Global_ACPI_Interrupt_Table[i_frame->isr_num].InterruptNumber) // This will be 0 if ACPI isn't using it
+  { // Yes, so this is why we're here
+    Global_ACPI_Interrupt_Table[i_frame->isr_num].HandlerPointer(Global_ACPI_Interrupt_Table[i_frame->isr_num].Context);
   }
+  else // No, there's some other interrupt
+  {
+    switch(i_frame->isr_num)
+    {
 
+      //
+      // User-Defined Interrupts (32-255)
+      //
+
+  //    case 32: // Minimum allowed user-defined case number
+  //    // Case 32 code
+  //      break;
+  //    ....
+  //    case 255: // Maximum allowed case number
+  //    // Case 255 code
+  //      break;
+
+      //
+      // End of User-Defined Interrupts
+      //
+
+      default:
+        error_printf("User_ISR_handler: Unhandled Interrupt! IDT Entry: %#qu\r\n", i_frame->isr_num);
+        ISR_regdump(i_frame);
+        AVX_regdump((XSAVE_AREA_LAYOUT*)user_xsave_space);
+        asm volatile("hlt");
+        break;
+    }
+  }
   // %rdx: Mask for xcr0 [63:32], %rax: Mask for xcr0 [31:0]
   asm volatile ("xrstor64 %[area]"
                 : // No outputs
@@ -3367,6 +3486,7 @@ void GP_EXC_handler(EXCEPTION_FRAME * e_frame) // Fault #GP: General Protection
     default:
       EXC_regdump(e_frame);
       AVX_regdump((XSAVE_AREA_LAYOUT*)gp_xsave_space);
+      print_system_memmap();
       while(1)
       {
         asm volatile("hlt");

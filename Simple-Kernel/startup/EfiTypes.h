@@ -1,13 +1,13 @@
 /*++
 
 Copyright (c) 2004 - 2015, Intel Corporation. All rights reserved.<BR>
-This program and the accompanying materials                          
-are licensed and made available under the terms and conditions of the BSD License         
-which accompanies this distribution.  The full text of the license may be found at        
-http://opensource.org/licenses/bsd-license.php                                            
-                                                                                          
-THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,                     
-WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.             
+This program and the accompanying materials
+are licensed and made available under the terms and conditions of the BSD License
+which accompanies this distribution.  The full text of the license may be found at
+http://opensource.org/licenses/bsd-license.php
+
+THE PROGRAM IS DISTRIBUTED UNDER THE BSD LICENSE ON AN "AS IS" BASIS,
+WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 
 Module Name:
 
@@ -28,6 +28,7 @@ Abstract:
 typedef uint8_t BOOLEAN;
 typedef intn_t INTN;
 typedef uintn_t UINTN;
+#ifndef ACKERNEL64
 typedef int8_t INT8;
 typedef uint8_t UINT8;
 typedef int16_t INT16;
@@ -36,10 +37,10 @@ typedef int32_t INT32;
 typedef uint32_t UINT32;
 typedef int64_t INT64;
 typedef uint64_t UINT64;
+#endif /* ACKERNEL64 */
 typedef char CHAR8;
 typedef uint16_t CHAR16;
 typedef UINT64 EFI_LBA;
-
 //
 // Modifiers for EFI Data Types used to self document code.
 // Please see EFI coding convention for proper usage.
@@ -84,7 +85,7 @@ typedef UINT64 EFI_LBA;
 //
 #ifndef EFIAPI
   #define EFIAPI  _EFIAPI
-#endif  
+#endif
 
 //
 // EFI Constants. They may exist in other build structures, so #ifndef them.

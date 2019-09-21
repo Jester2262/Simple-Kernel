@@ -131,7 +131,7 @@ Abstract:
 //
 // Basic int types of various widths
 //
-
+#ifndef ACKERNEL64
 #if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 199901L )
 
     // No ANSI C 1999/2000 stdint.h integer width declarations
@@ -185,7 +185,7 @@ Abstract:
 #elif defined(__GNUC__)
     #include <stdint.h>
 #endif
-
+#endif /* ACKERNEL64 */
 //
 // Native integer size in stdint.h
 //

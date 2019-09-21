@@ -29,8 +29,8 @@ perl -pi -e 's/\r\n/\n/g' h_files.txt
 #
 
 CurDir=$PWD
-GCC_FOLDER_NAME=gcc-linux
-BINUTILS_FOLDER_NAME=binutils-2.29.1-linux
+GCC_FOLDER_NAME=/usr
+BINUTILS_FOLDER_NAME=/usr
 LinkerScript="Linker/LinkerScript64-ELF.ld"
 
 # So that GCC knows where to find as and ld
@@ -85,12 +85,12 @@ done < $CurDir/h_files.txt
 # Loop through and compile the backend .c files, which are listed in c_files_linux.txt
 #
 
-#set -v
-#while read f; do
-#  echo "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
-#  "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
-#done < $CurDir/c_files_linux.txt
-#set +v
+set -v
+while read f; do
+  echo "$GCC_FOLDER_NAME/bin/gcc" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
+  "$GCC_FOLDER_NAME/bin/gcc" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
+done < $CurDir/c_files_linux.txt
+set +v
 
 #
 # Compile the .c files in the startup folder
@@ -98,8 +98,8 @@ done < $CurDir/h_files.txt
 
 set -v
 for f in $CurDir/startup/*.c; do
-  echo "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -O3 -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
-  "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -O3 -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  echo "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -O3 -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -O3 -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
 done
 set +v
 
@@ -119,8 +119,8 @@ set +v
 # "gcc" version
 set -v
 for f in $CurDir/startup/*.S; do
-  echo "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
-  "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
+  echo "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
+  "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
 done
 set +v
 
@@ -130,8 +130,8 @@ set +v
 
 set -v
 for f in $CurDir/src/*.c; do
-  echo "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
-  "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  echo "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="${f%.*}.out" -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
 done
 set +v
 
@@ -140,9 +140,9 @@ set +v
 # forward slashes) locations of compiled Backend .o files
 #
 
-#while read f; do
-#  echo "${f%.*}.o" | tee -a objects.list
-#done < $CurDir/c_files_linux.txt
+while read f; do
+  echo "${f%.*}.o" | tee -a objects.list
+done < $CurDir/c_files_linux.txt
 
 #
 # Add compiled .o files from the startup directory to objects.list
@@ -168,9 +168,9 @@ done
 # NOTE: Linkerscripts may be needed for bigger projects
 #
 
-# "$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -T$LinkerScript -static-pie -nostdlib -s -Wl,--warn-common -Wl,--no-undefined -Wl,-e,kernel_main -Wl,-z,text -Wl,-z,norelro -Wl,-z,max-page-size=0x1000 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64.elf" @"objects.list"
+# "$GCC_FOLDER_NAME/bin/gcc" -T$LinkerScript -static-pie -nostdlib -s -Wl,--warn-common -Wl,--no-undefined -Wl,-e,kernel_main -Wl,-z,text -Wl,-z,norelro -Wl,-z,now -Wl,-z,max-page-size=0x1000 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64.elf" @"objects.list"
 set -v
-"$GCC_FOLDER_NAME/bin/gcc" -march=skylake -mavx2 -static-pie -nostdlib -s -Wl,--warn-common -Wl,--no-undefined -Wl,-e,kernel_main -Wl,-z,text -Wl,-z,norelro -Wl,-z,max-page-size=0x1000 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64.elf" @"objects.list"
+"$GCC_FOLDER_NAME/bin/gcc" -static-pie -nostdlib -s -Wl,--warn-common -Wl,--no-undefined -Wl,-e,kernel_main -Wl,-z,text -Wl,-z,norelro -Wl,-znow -Wl,-z,max-page-size=0x1000 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64.elf" @"objects.list"
 set +v
 # Remove -s in the above command to keep debug symbols in the output binary.
 

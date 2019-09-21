@@ -22,15 +22,15 @@
 //     a trap instead, call set_trap_entry() instead of set_interrupt_entry() with the same arguments)
 //  4) Add a "case (interrupt number):" statement in the correct handler function in System.c
 //
-// These are the 3 pathways for handlers, depending on which outcome is desired (just replace "(num)" with a number 32-255, since 0-31 are architecturally reserved):
+// These are the 3 pathways for handlers, depending on which outcome is desired (just replace "{num}" with a number 32-255, since 0-31 are architecturally reserved):
 //
 // For user-defined notifications:
-//  a. USER_ISR_MACRO (num) --> extern void User_ISR_pusher(num) --> set_interrupt_entry( (num), (uint64_t)User_ISR_pusher(num) ) --> "case (num):" in User_ISR_handler()
+//  a. USER_ISR_MACRO {num} --> extern void User_ISR_pusher{num} --> set_interrupt_entry( {num}, (uint64_t)User_ISR_pusher{num} ) --> "case {num}:" in User_ISR_handler()
 //    >> This assumes a special dedicated handler isn't desired, otherwise the macro syntax is slightly different as described in the macro section of ISR.S.
 //
 // For generic CPU architectural notifications:
-//  b. CPU_ISR_MACRO (num) --> extern void CPU_ISR_pusher(num) --> set_interrupt_entry( (num), (uint64_t)CPU_ISR_pusher(num) ) --> CPU_ISR_handler()
-//  c. CPU_EXC_MACRO (num) --> extern void CPU_EXC_pusher(num) --> set_interrupt_entry( (num), (uint64_t)CPU_EXC_pusher(num) ) --> CPU_EXC_handler()
+//  b. CPU_ISR_MACRO {num} --> extern void CPU_ISR_pusher{num} --> set_interrupt_entry( {num}, (uint64_t)CPU_ISR_pusher{num} ) --> CPU_ISR_handler()
+//  c. CPU_EXC_MACRO {num} --> extern void CPU_EXC_pusher{num} --> set_interrupt_entry( {num}, (uint64_t)CPU_EXC_pusher{num} ) --> CPU_EXC_handler()
 //
 // Note again that set_interrupt_entry() can be replaced by set_trap_entry() if desired. The difference is that traps don't clear IF in
 // %rflags, which allows maskable interrupts to trigger during other interrupts instead of double-faulting.
@@ -197,7 +197,7 @@ typedef struct __attribute__((aligned(64), packed)) {
 // The standard user XSAVE states include x87/SSE/AVX/AVX-512 and MPX/PKRU.
 
 //------------------------------------------//
-// References to functions defined in ISR.h //
+// References to functions defined in ISR.S //
 //------------------------------------------//
 
 //

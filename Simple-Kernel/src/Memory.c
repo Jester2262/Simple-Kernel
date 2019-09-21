@@ -14,6 +14,7 @@
 //
 
 #include "Kernel64.h"
+#include "avxmem.h"
 
 #define MEMORY_CHECK_INFO
 
@@ -91,7 +92,7 @@ void * malloc(size_t numbytes)
 
 void * malloc4KB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = AllocateFreeAddress(numbytes, new_buffer, (4ULL << 10));
 
@@ -100,7 +101,7 @@ void * malloc4KB(size_t numbytes)
 
 void * malloc2MB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = AllocateFreeAddress(numbytes, new_buffer, (2ULL << 20));
 
@@ -109,7 +110,7 @@ void * malloc2MB(size_t numbytes)
 
 void * malloc1GB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = AllocateFreeAddress(numbytes, new_buffer, (1ULL << 30));
 
@@ -118,7 +119,7 @@ void * malloc1GB(size_t numbytes)
 
 void * malloc512GB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = AllocateFreeAddress(numbytes, new_buffer, (512ULL << 30));
 
@@ -127,7 +128,7 @@ void * malloc512GB(size_t numbytes)
 
 void * malloc256TB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = AllocateFreeAddress(numbytes, new_buffer, (256ULL << 40));
 
@@ -206,7 +207,7 @@ void * realloc(void * allocated_address, size_t size)
         if(
             (Next_Piece->PhysicalStart != PhysicalEnd)
             ||
-            ((uint8_t*)Next_Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
+            ((uint8_t*)Next_Piece >= ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // This OR check protects against the obscure case of there being a rogue entry adjacent the end of the memory map that describes a valid EfiConventionalMemory entry
         {
           // See if PhysicalEnd matches any PhysicalStart for unordered maps
@@ -224,7 +225,7 @@ void * realloc(void * allocated_address, size_t size)
         if(
             (Next_Piece->Type == EfiConventionalMemory) && (Next_Piece->NumberOfPages >= additional_numpages)
             &&
-            (uint8_t*)Next_Piece != ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)
+            ((uint8_t*)Next_Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // Check if the loop didn't break (this also covers the case where the memory map is the last valid entry in the map)
         {
           if(Next_Piece->NumberOfPages > additional_numpages)
@@ -249,7 +250,7 @@ void * realloc(void * allocated_address, size_t size)
             // Erase the claimed descriptor
             // Zero out the piece we just claimed
             AVX_memset(Next_Piece, 0, Global_Memory_Info.MemMapDescriptorSize); // Next_Piece is a pointer
-            AVX_memmove(Next_Piece, (uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - ((uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize));
+            AVX_memmove(Next_Piece, (uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)((uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize));
 
             // Update Global_Memory_Info
             Global_Memory_Info.MemMapSize -= Global_Memory_Info.MemMapDescriptorSize;
@@ -308,7 +309,7 @@ void * realloc(void * allocated_address, size_t size)
         if(
             (Next_Piece->PhysicalStart != PhysicalEnd)
             ||
-            ((uint8_t*)Next_Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
+            ((uint8_t*)Next_Piece >= ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // This OR check protects against the obscure case of there being a rogue entry adjacent the end of the memory map that describes a valid EfiConventionalMemory entry
         {
           // See if PhysicalEnd matches any PhysicalStart for unordered maps
@@ -326,7 +327,7 @@ void * realloc(void * allocated_address, size_t size)
         if(
             (Next_Piece->Type == EfiConventionalMemory)
             &&
-            (uint8_t*)Next_Piece != ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)
+            ((uint8_t*)Next_Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // Check if the loop didn't break (this also covers the case where the memory map is the last valid entry in the map)
         { // Yes, we can reclaim without requiring a new entry
 
@@ -363,7 +364,7 @@ void * realloc(void * allocated_address, size_t size)
           // No attribute change
 
           // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-          AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+          AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
           // Insert the new piece (by overwriting the now-duplicated entry with new values)
           // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -407,7 +408,7 @@ void * realloc(void * allocated_address, size_t size)
             // No attribute change
 
             // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-            AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+            AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
             // Insert the new piece (by overwriting the now-duplicated entry with new values)
             // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -460,7 +461,7 @@ void free(void * allocated_address)
   // Get a pointer for the descriptor corresponding to the address (scan the memory map to find it)
   for(Piece = Global_Memory_Info.MemMap; (uint8_t*)Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize); Piece = (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize))
   {
-    if((Piece->Type == (EfiMaxMemoryType + 1)) && ((void*)Piece->PhysicalStart == allocated_address))
+    if((Piece->Type == (EfiMaxMemoryType + 1)) && (Piece->PhysicalStart == (uint64_t)allocated_address))
     { // Found it, Piece holds the spot now.
 
       // Zero out the destination
@@ -500,6 +501,8 @@ void free(void * allocated_address)
 // typedef struct {
 //   uint64_t               PageTableEntryData;  // The page table entry, which contains the hardware page base address and that page's flags.
 //   uint64_t               HWPageSize;          // The size of the hardware page (4kB, 2MB, 1GB, 512GB, 256TB, etc.)
+//   uint64_t               HWPageShift;         // The shift factor to get the hardware page size (useful to determine how many hardware pages a given region crosses)
+//   uint64_t               HWPageBase;          // If the page exists, the base page address. This will contain ~0ULL if the page does not exist in the memory map.
 //   uint64_t               WholePageInRegion;   // 1 if the whole hardware page fits in the region described by MemoryMapRegionData, 0 otherwise
 //   EFI_MEMORY_DESCRIPTOR  MemoryMapRegionData; // The memory map entry describing the region that contains the page base address
 // } PAGE_ENTRY_INFO_STRUCT;
@@ -560,9 +563,11 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
           if(((uint64_t*)base_pml_addr)[pml5_part] & (1ULL << 7)) // Bit 7 is the "no deeper table" bit. Need to check it because the page base address might happen to be, e.g., 256TB aligned but described by a 4kB page table.
           {
             page_data.HWPageSize = (256ULL << 40);
+            page_data.HWPageShift = PML5_SHIFT;
             page_data.PageTableEntryData = ((uint64_t*)base_pml_addr)[pml5_part];
 
             uint64_t pml_base_address = page_data.PageTableEntryData & PML5_ADDRESS_MASK;
+            page_data.HWPageBase = pml_base_address;
             if(page_base_address != pml_base_address)
             {
               warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -585,9 +590,11 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
             if(((uint64_t*)next_pml_addr)[pml4_part] & (1ULL << 7))
             {
               page_data.HWPageSize = (512ULL << 30);
+              page_data.HWPageShift = PML4_SHIFT;
               page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml4_part];
 
               uint64_t pml_base_address = page_data.PageTableEntryData & PML4_ADDRESS_MASK;
+              page_data.HWPageBase = pml_base_address;
               if(page_base_address != pml_base_address)
               {
                 warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -610,9 +617,11 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
               if(((uint64_t*)next_pml_addr)[pml3_part] & (1ULL << 7))
               {
                 page_data.HWPageSize = (1ULL << 30);
+                page_data.HWPageShift = PML3_SHIFT;
                 page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml3_part];
 
                 uint64_t pml_base_address = page_data.PageTableEntryData & PML3_ADDRESS_MASK;
+                page_data.HWPageBase = pml_base_address;
                 if(page_base_address != pml_base_address)
                 {
                   warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -635,9 +644,11 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
                 if(((uint64_t*)next_pml_addr)[pml2_part] & (1ULL << 7))
                 {
                   page_data.HWPageSize = (2ULL << 20);
+                  page_data.HWPageShift = PML2_SHIFT;
                   page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml2_part];
 
                   uint64_t pml_base_address = page_data.PageTableEntryData & PML2_ADDRESS_MASK;
+                  page_data.HWPageBase = pml_base_address;
                   if(page_base_address != pml_base_address)
                   {
                     warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -658,7 +669,11 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
 
                   // PML1: 4kB
                   page_data.HWPageSize = (4ULL << 10);
+                  page_data.HWPageShift = PML1_SHIFT;
                   page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml1_part];
+
+                  uint64_t pml_base_address = page_data.PageTableEntryData & PML1_ADDRESS_MASK;
+                  page_data.HWPageBase = pml_base_address;
 
                   // It's not possible to both get here and trigger a page base address error
 
@@ -687,9 +702,11 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
           if(((uint64_t*)next_pml_addr)[pml3_part] & (1ULL << 7))
           {
             page_data.HWPageSize = (1ULL << 30);
+            page_data.HWPageShift = PML3_SHIFT;
             page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml3_part];
 
             uint64_t pml_base_address = page_data.PageTableEntryData & PML3_ADDRESS_MASK;
+            page_data.HWPageBase = pml_base_address;
             if(page_base_address != pml_base_address)
             {
               warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -712,9 +729,11 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
             if(((uint64_t*)next_pml_addr)[pml2_part] & (1ULL << 7))
             {
               page_data.HWPageSize = (2ULL << 20);
+              page_data.HWPageShift = PML2_SHIFT;
               page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml2_part];
 
               uint64_t pml_base_address = page_data.PageTableEntryData & PML2_ADDRESS_MASK;
+              page_data.HWPageBase = pml_base_address;
               if(page_base_address != pml_base_address)
               {
                 warning_printf("get_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -735,7 +754,11 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
 
               // PML1/PT: 4kB
               page_data.HWPageSize = (4ULL << 10);
+              page_data.HWPageShift = PML1_SHIFT;
               page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml1_part];
+
+              uint64_t pml_base_address = page_data.PageTableEntryData & PML1_ADDRESS_MASK;
+              page_data.HWPageBase = pml_base_address;
 
               // It's not possible to both get here and trigger a page base address error
 
@@ -760,6 +783,7 @@ PAGE_ENTRY_INFO_STRUCT get_page(void * hw_page_base_addr)
     if(Piece >= (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
     {
       error_printf("get_page: Could not find page base address. It may not be aligned or allocated.\r\n");
+      page_data.HWPageBase = ~0ULL;
       return page_data;
     }
   }
@@ -1239,7 +1263,7 @@ void * vmalloc(size_t numbytes)
 
 void * vmalloc4KB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = VAllocateFreeAddress(numbytes, new_buffer, (4ULL << 10));
 
@@ -1248,7 +1272,7 @@ void * vmalloc4KB(size_t numbytes)
 
 void * vmalloc2MB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = VAllocateFreeAddress(numbytes, new_buffer, (2ULL << 20));
 
@@ -1257,7 +1281,7 @@ void * vmalloc2MB(size_t numbytes)
 
 void * vmalloc1GB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = VAllocateFreeAddress(numbytes, new_buffer, (1ULL << 30));
 
@@ -1266,7 +1290,7 @@ void * vmalloc1GB(size_t numbytes)
 
 void * vmalloc512GB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = VAllocateFreeAddress(numbytes, new_buffer, (512ULL << 30));
 
@@ -1275,7 +1299,7 @@ void * vmalloc512GB(size_t numbytes)
 
 void * vmalloc256TB(size_t numbytes)
 {
-  EFI_PHYSICAL_ADDRESS new_buffer = 0; // Make this 0x100000000 to only operate above 4GB
+  EFI_PHYSICAL_ADDRESS new_buffer = 0x1; // Make this 0x100000000 to only operate above 4GB
 
   new_buffer = VAllocateFreeAddress(numbytes, new_buffer, (256ULL << 40));
 
@@ -1354,7 +1378,7 @@ void * vrealloc(void * allocated_address, size_t size)
         if(
             (Next_Piece->VirtualStart != VirtualEnd)
             ||
-            ((uint8_t*)Next_Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
+            ((uint8_t*)Next_Piece >= ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // This OR check protects against the obscure case of there being a rogue entry adjacent the end of the memory map that describes a valid EfiConventionalMemory entry
         {
           // See if VirtualEnd matches any VirtualStart for unordered maps
@@ -1372,7 +1396,7 @@ void * vrealloc(void * allocated_address, size_t size)
         if(
             (Next_Piece->Type == EfiConventionalMemory) && (Next_Piece->NumberOfPages >= additional_numpages)
             &&
-            (uint8_t*)Next_Piece != ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)
+            ((uint8_t*)Next_Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // Check if the loop didn't break (this also covers the case where the memory map is the last valid entry in the map)
         {
           if(Next_Piece->NumberOfPages > additional_numpages)
@@ -1397,7 +1421,7 @@ void * vrealloc(void * allocated_address, size_t size)
             // Erase the claimed descriptor
             // Zero out the piece we just claimed
             AVX_memset(Next_Piece, 0, Global_Memory_Info.MemMapDescriptorSize); // Next_Piece is a pointer
-            AVX_memmove(Next_Piece, (uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - ((uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize));
+            AVX_memmove(Next_Piece, (uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)((uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize));
 
             // Update Global_Memory_Info
             Global_Memory_Info.MemMapSize -= Global_Memory_Info.MemMapDescriptorSize;
@@ -1456,7 +1480,7 @@ void * vrealloc(void * allocated_address, size_t size)
         if(
             (Next_Piece->VirtualStart != VirtualEnd)
             ||
-            ((uint8_t*)Next_Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
+            ((uint8_t*)Next_Piece >= ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // This OR check protects against the obscure case of there being a rogue entry adjacent the end of the memory map that describes a valid EfiConventionalMemory entry
         {
           // See if VirtualEnd matches any VirtualStart for unordered maps
@@ -1474,7 +1498,7 @@ void * vrealloc(void * allocated_address, size_t size)
         if(
             (Next_Piece->Type == EfiConventionalMemory)
             &&
-            (uint8_t*)Next_Piece != ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)
+            ((uint8_t*)Next_Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // Check if the loop didn't break (this also covers the case where the memory map is the last valid entry in the map)
         { // Yes, we can reclaim without requiring a new entry
 
@@ -1511,7 +1535,7 @@ void * vrealloc(void * allocated_address, size_t size)
           // No attribute change
 
           // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-          AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+          AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
           // Insert the new piece (by overwriting the now-duplicated entry with new values)
           // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -1555,7 +1579,7 @@ void * vrealloc(void * allocated_address, size_t size)
             // No attribute change
 
             // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-            AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+            AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
             // Insert the new piece (by overwriting the now-duplicated entry with new values)
             // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -1608,7 +1632,7 @@ void vfree(void * allocated_address)
   // Get a pointer for the descriptor corresponding to the address (scan the memory map to find it)
   for(Piece = Global_Memory_Info.MemMap; (uint8_t*)Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize); Piece = (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize))
   {
-    if((Piece->Type == (EfiMaxMemoryType + 2)) && ((void*)Piece->VirtualStart == allocated_address))
+    if((Piece->Type == (EfiMaxMemoryType + 2)) && (Piece->VirtualStart == (uint64_t)allocated_address))
     { // Found it, Piece holds the spot now.
 
       // Zero out the destination
@@ -1649,6 +1673,8 @@ void vfree(void * allocated_address)
 // typedef struct {
 //   uint64_t               PageTableEntryData;  // The page table entry, which contains the hardware page base address and that page's flags.
 //   uint64_t               HWPageSize;          // The size of the hardware page (4kB, 2MB, 1GB, 512GB, 256TB, etc.)
+//   uint64_t               HWPageShift;         // The shift factor to get the hardware page size (useful to determine how many hardware pages a given region crosses)
+//   uint64_t               HWPageBase;          // If the page exists, the base page address. This will contain ~0ULL if the page does not exist in the memory map.
 //   uint64_t               WholePageInRegion;   // 1 if the whole hardware page fits in the region described by MemoryMapRegionData, 0 otherwise
 //   EFI_MEMORY_DESCRIPTOR  MemoryMapRegionData; // The memory map entry describing the region that contains the page base address
 // } PAGE_ENTRY_INFO_STRUCT;
@@ -1719,9 +1745,11 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
         if(((uint64_t*)base_pml_addr)[pml5_part] & (1ULL << 7)) // Bit 7 is the "no deeper table" bit. Need to check it because the page base address might happen to be, e.g., 256TB aligned but described by a 4kB page table.
         {
           page_data.HWPageSize = (256ULL << 40);
+          page_data.HWPageShift = PML5_SHIFT;
           page_data.PageTableEntryData = ((uint64_t*)base_pml_addr)[pml5_part];
 
           uint64_t pml_base_address = page_data.PageTableEntryData & PML5_ADDRESS_MASK;
+          page_data.HWPageBase = pml_base_address;
           if(page_base_address != pml_base_address)
           {
             warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -1744,9 +1772,11 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
           if(((uint64_t*)next_pml_addr)[pml4_part] & (1ULL << 7))
           {
             page_data.HWPageSize = (512ULL << 30);
+            page_data.HWPageShift = PML4_SHIFT;
             page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml4_part];
 
             uint64_t pml_base_address = page_data.PageTableEntryData & PML4_ADDRESS_MASK;
+            page_data.HWPageBase = pml_base_address;
             if(page_base_address != pml_base_address)
             {
               warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -1769,9 +1799,11 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
             if(((uint64_t*)next_pml_addr)[pml3_part] & (1ULL << 7))
             {
               page_data.HWPageSize = (1ULL << 30);
+              page_data.HWPageShift = PML3_SHIFT;
               page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml3_part];
 
               uint64_t pml_base_address = page_data.PageTableEntryData & PML3_ADDRESS_MASK;
+              page_data.HWPageBase = pml_base_address;
               if(page_base_address != pml_base_address)
               {
                 warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -1794,9 +1826,11 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
               if(((uint64_t*)next_pml_addr)[pml2_part] & (1ULL << 7))
               {
                 page_data.HWPageSize = (2ULL << 20);
+                page_data.HWPageShift = PML2_SHIFT;
                 page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml2_part];
 
                 uint64_t pml_base_address = page_data.PageTableEntryData & PML2_ADDRESS_MASK;
+                page_data.HWPageBase = pml_base_address;
                 if(page_base_address != pml_base_address)
                 {
                   warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -1817,7 +1851,11 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
 
                 // PML1: 4kB
                 page_data.HWPageSize = (4ULL << 10);
+                page_data.HWPageShift = PML1_SHIFT;
                 page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml1_part];
+
+                uint64_t pml_base_address = page_data.PageTableEntryData & PML1_ADDRESS_MASK;
+                page_data.HWPageBase = pml_base_address;
 
                 // It's not possible to both get here and trigger a page base address error
 
@@ -1846,9 +1884,11 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
         if(((uint64_t*)next_pml_addr)[pml3_part] & (1ULL << 7))
         {
           page_data.HWPageSize = (1ULL << 30);
+          page_data.HWPageShift = PML3_SHIFT;
           page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml3_part];
 
           uint64_t pml_base_address = page_data.PageTableEntryData & PML3_ADDRESS_MASK;
+          page_data.HWPageBase = pml_base_address;
           if(page_base_address != pml_base_address)
           {
             warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -1871,9 +1911,11 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
           if(((uint64_t*)next_pml_addr)[pml2_part] & (1ULL << 7))
           {
             page_data.HWPageSize = (2ULL << 20);
+            page_data.HWPageShift = PML2_SHIFT;
             page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml2_part];
 
             uint64_t pml_base_address = page_data.PageTableEntryData & PML2_ADDRESS_MASK;
+            page_data.HWPageBase = pml_base_address;
             if(page_base_address != pml_base_address)
             {
               warning_printf("vget_page: %#qx is not the page base address for this page,\r\nthis is: %#qx. Please try again with the correct address.\r\n", page_base_address, pml_base_address);
@@ -1894,7 +1936,11 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
 
             // PML1/PT: 4kB
             page_data.HWPageSize = (4ULL << 10);
+            page_data.HWPageShift = PML1_SHIFT;
             page_data.PageTableEntryData = ((uint64_t*)next_pml_addr)[pml1_part];
+
+            uint64_t pml_base_address = page_data.PageTableEntryData & PML1_ADDRESS_MASK;
+            page_data.HWPageBase = pml_base_address;
 
             // It's not possible to both get here and trigger a page base address error
 
@@ -1919,6 +1965,7 @@ PAGE_ENTRY_INFO_STRUCT vget_page(void * hw_page_base_addr)
   if(Piece >= (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
   {
     error_printf("vget_page: Could not find page base address. It may not be aligned or allocated.\r\n");
+    page_data.HWPageBase = ~0ULL;
     return page_data;
   }
 
@@ -2653,7 +2700,7 @@ typedef struct {
 // This is a file scope global variable, which lets it be declared static. This prevents a stack overflow that could arise if it were
 // local to its function of use. Static arrays defined like this can actually be made very large, but they cannot be accessed by any
 // functions that are not explicitly defined in this file. It cannot be passed as an argument to outside functions, either.
-static const char mem_types[20][27] = {
+static const char mem_types[21][27] = {
     "EfiReservedMemoryType     ",
     "EfiLoaderCode             ",
     "EfiLoaderData             ",
@@ -2673,7 +2720,8 @@ static const char mem_types[20][27] = {
     "malloc                    ", // EfiMaxMemoryType + 1
     "vmalloc                   ", // EfiMaxMemoryType + 2
     "Memory Map                ", // EfiMaxMemoryType + 3
-    "Page Tables               "  // EfiMaxMemoryType + 4
+    "Page Tables               ", // EfiMaxMemoryType + 4
+    "Null Area                 "  // EfiMaxMemoryType + 5
 };
 
 void print_system_memmap(void)
@@ -2681,7 +2729,7 @@ void print_system_memmap(void)
   EFI_MEMORY_DESCRIPTOR * Piece;
   uint16_t line = 0;
 
-  printf("MemMap %#qx, MemMapSize: %qu, MemMapDescriptorSize: %qu, MemMapDescriptorVersion: %u\r\n", Global_Memory_Info.MemMap, Global_Memory_Info.MemMapSize, Global_Memory_Info.MemMapDescriptorSize, Global_Memory_Info.MemMapDescriptorVersion);
+  printf("MemMap: %#qx, MemMapSize: %qu, MemMapDescriptorSize: %qu, MemMapDescriptorVersion: %u\r\n", Global_Memory_Info.MemMap, Global_Memory_Info.MemMapSize, Global_Memory_Info.MemMapDescriptorSize, Global_Memory_Info.MemMapDescriptorVersion);
 
   // Multiply NumOfPages by EFI_PAGE_SIZE or do (NumOfPages << EFI_PAGE_SHIFT) to get the end address... which should just be the start of the next section.
   for(Piece = Global_Memory_Info.MemMap; Piece < (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize); Piece = (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize))
@@ -2739,7 +2787,7 @@ void Setup_MemMap(void)
   size_t numpages = EFI_SIZE_TO_PAGES(Global_Memory_Info.MemMapSize + Global_Memory_Info.MemMapDescriptorSize); // Need enough space to contain the map + one additional descriptor (for the map itself)
 
   // Map's gettin' evicted, gotta relocate.
-  EFI_PHYSICAL_ADDRESS new_MemMap_base_address = ActuallyFreeAddress(numpages, 0); // This will only give addresses at the base of a chunk of EfiConventionalMemory
+  EFI_PHYSICAL_ADDRESS new_MemMap_base_address = ActuallyFreeAddress(numpages, 0x1); // This will only give addresses at the base of a chunk of EfiConventionalMemory, use 0x1 because we don't want address 0x0.
   if(new_MemMap_base_address == ~0ULL)
   {
     error_printf("Setup_MemMap: Can't move MemMap for enlargement: Out of memory, memory subsystem not usable.\r\n");
@@ -2766,24 +2814,6 @@ void Setup_MemMap(void)
       { // Found it, Piece holds the spot now. Also, we know the map base is at Piece->PhysicalStart of an EfiConventionalMemory area because we put it there with ActuallyFreeAddress.
         break;
       }
-
-      /*
-      // This commented-out code would be used instead of the above conditional if, for some reason, the new address is situated not at the PhysicalStart boundary.
-      if((Piece->Type == EfiConventionalMemory) && (Piece->NumberOfPages >= numpages)) // The new map's in EfiConventionalMemory
-      {
-        EFI_PHYSICAL_ADDRESS PhysicalEnd = Piece->PhysicalStart + (Piece->NumberOfPages << EFI_PAGE_SHIFT); // Get the end of this range for bounds checking (this value might be the start address of the next range)
-
-        if(
-            ((uint8_t*)Global_Memory_Info.MemMap >= (uint8_t*)Piece->PhysicalStart)
-            &&
-            (((uint8_t*)Global_Memory_Info.MemMap + (numpages << EFI_PAGE_SHIFT)) <= (uint8_t*)PhysicalEnd)
-          ) // Bounds check
-        {
-          break; // Found it, Piece holds the spot now. Also, we know it's at the start of Piece->PhysicalStart because we put it there with ActuallyFreeAddress.
-        }
-      }
-      */
-
     }
 
     if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
@@ -2816,7 +2846,7 @@ void Setup_MemMap(void)
         Piece->NumberOfPages -= numpages;
 
         // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
         // Insert the new piece (by overwriting the now-duplicated entry with new values)
         // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -2831,6 +2861,9 @@ void Setup_MemMap(void)
         Global_Memory_Info.MemMapSize += Global_Memory_Info.MemMapDescriptorSize;
       }
       // Done modifying new map.
+
+      // Now set up null area, or at least try to.
+      null_alloc();
     }
   }
 }
@@ -2852,6 +2885,7 @@ void Setup_MemMap(void)
 // also when working with multiple cores.
 //
 // A list of functions that call MemMap_Prep():
+// - null_alloc()
 // - pagetable_alloc()
 // - AllocateFreeAddress()
 // - VAllocateFreeAddress()
@@ -2861,7 +2895,7 @@ void Setup_MemMap(void)
 uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
 {
   // Need enough space to contain the map + "num_additional_descriptors" additional descriptors
-  size_t numpages = EFI_SIZE_TO_PAGES(Global_Memory_Info.MemMapSize + num_additional_descriptors*Global_Memory_Info.MemMapDescriptorSize);
+  size_t numpages = EFI_SIZE_TO_PAGES(Global_Memory_Info.MemMapSize + (num_additional_descriptors * Global_Memory_Info.MemMapDescriptorSize));
   size_t orig_numpages = EFI_SIZE_TO_PAGES(Global_Memory_Info.MemMapSize);
 
   if(numpages > orig_numpages)
@@ -2897,7 +2931,7 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
       if(
           (Next_Piece->PhysicalStart != PhysicalEnd)
           ||
-          ((uint8_t*)Next_Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
+          ((uint8_t*)Next_Piece >= ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
         ) // This OR check protects against the obscure case of there being a rogue entry adjacent the end of the memory map that describes a valid EfiConventionalMemory entry
       {
         // See if PhysicalEnd matches any PhysicalStart for unordered maps
@@ -2915,7 +2949,7 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
       if(
           (Next_Piece->Type == EfiConventionalMemory) && (Next_Piece->NumberOfPages >= additional_numpages)
           &&
-          (uint8_t*)Next_Piece != ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)
+          ((uint8_t*)Next_Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
         ) // Check if the loop didn't break (this also covers the case where the memory map is the last valid entry in the map)
       {
         if(Next_Piece->NumberOfPages > additional_numpages)
@@ -2940,7 +2974,7 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
           // Erase the claimed descriptor
           // Zero out the piece we just claimed
           AVX_memset(Next_Piece, 0, Global_Memory_Info.MemMapDescriptorSize); // Next_Piece is a pointer
-          AVX_memmove(Next_Piece, (uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - ((uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize));
+          AVX_memmove(Next_Piece, (uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)((uint8_t*)Next_Piece + Global_Memory_Info.MemMapDescriptorSize));
 
           // Update Global_Memory_Info
           Global_Memory_Info.MemMapSize -= Global_Memory_Info.MemMapDescriptorSize;
@@ -2961,10 +2995,10 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
       {
         // Map's gettin' evicted, gotta relocate.
 
-        // Need 2 descriptors' worth of additional space in case old memmap location becomes an unmergeable EfiConventionalMemory "island"
-        numpages = EFI_SIZE_TO_PAGES(Global_Memory_Info.MemMapSize + (Global_Memory_Info.MemMapDescriptorSize << 1));
+        // So re-set numpages because now that the map needs the requested amount of descriptors + 1 more for itself
+        numpages = EFI_SIZE_TO_PAGES(Global_Memory_Info.MemMapSize + ((num_additional_descriptors + 1)*Global_Memory_Info.MemMapDescriptorSize));
 
-        EFI_PHYSICAL_ADDRESS new_MemMap_base_address = ActuallyFreeAddress(numpages, 0); // This will only give addresses at the base of a chunk of EfiConventionalMemory
+        EFI_PHYSICAL_ADDRESS new_MemMap_base_address = ActuallyFreeAddress(numpages, 0x1); // This will only give addresses at the base of a chunk of EfiConventionalMemory, use 0x1 because we don't want address 0x0.
         if(new_MemMap_base_address == ~0ULL)
         {
           error_printf("MemMap_Prep: Can't move memmap for enlargement: Out of memory\r\n");
@@ -2980,6 +3014,9 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
           // Do this now because any later Piece is not guaranteed to point to the old memmap descriptor in the new map
           // It's a lot faster to do it here than to look for it later when there's another memmap entry
           // For multi-core stuff, all other processors need to be prevented from accessing the map during this whole function
+
+          // TODO: make a "memory map in use" tracker variable that gets checked before map gets read from or written to, and stops other core until it's free
+          // Will need to implement a priority mechnism, as well, to allow other cores first-in, first-out
           Piece->Type = EfiConventionalMemory;
 
           // Move (copy) the map from MemMap to new_MemMap
@@ -2989,6 +3026,7 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
 
           // Update Global_Memory_Info MemMap location with new address
           Global_Memory_Info.MemMap = new_MemMap;
+          // MemMapSize is still the same size, though.
 
           // Get a pointer for the descriptor corresponding to the new location of the map (scan the map to find it)
           for(Piece = Global_Memory_Info.MemMap; (uint8_t*)Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize); Piece = (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize))
@@ -2997,23 +3035,6 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
             { // Found it, Piece holds the new spot now. Also, we know the map base is at Piece->PhysicalStart of an EfiConventionalMemory area because we put it there with ActuallyFreeAddress.
               break;
             }
-
-            /*
-            // This commented-out code would be used instead of the above conditional if, for some reason, the new address is situated not at the PhysicalStart boundary.
-            if((Piece->Type == EfiConventionalMemory) && (Piece->NumberOfPages >= numpages)) // The new map's in EfiConventionalMemory
-            {
-              PhysicalEnd = Piece->PhysicalStart + (Piece->NumberOfPages << EFI_PAGE_SHIFT); // Get the end of this range for bounds checking (this value might be the start address of the next range)
-
-              if(
-                  ((uint8_t*)Global_Memory_Info.MemMap >= (uint8_t*)Piece->PhysicalStart)
-                  &&
-                  (((uint8_t*)Global_Memory_Info.MemMap + (numpages << EFI_PAGE_SHIFT)) <= (uint8_t*)PhysicalEnd)
-                ) // Bounds check
-              {
-                break; // Found it, Piece holds the spot now. Also, we know it's at the start of Piece->PhysicalStart because we put it there with ActuallyFreeAddress.
-              }
-            }
-            */
           }
 
           if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
@@ -3047,7 +3068,7 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
               Piece->NumberOfPages -= numpages;
 
               // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-              AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+              AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
               // Insert the new piece (by overwriting the now-duplicated entry with new values)
               // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -3060,11 +3081,10 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
 
               // Update Global_Memory_Info with new MemMap size
               Global_Memory_Info.MemMapSize += Global_Memory_Info.MemMapDescriptorSize;
-
-              // Finally, merge EfiConventionalMemory if possible
-              MergeContiguousConventionalMemory();
             }
+
             // Done modifying new map.
+            // Don't merge here, because that would undo everything just done.
           }
         }
 
@@ -3077,6 +3097,118 @@ uint64_t MemMap_Prep(uint64_t num_additional_descriptors)
 
   // All done
   return 0;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+//  null_alloc: Allocate Memory for Page Tables
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This function reserves the first 4kB page at address 0x0 for NULL. This is needed because many libraries depend on 0x0 being
+// invalid, but the malloc implementation here is perfectly happy to return it as a valid address (because it is). By reserving
+// address 0x0, such comparisons are safe and the memory at0x0 can be read to see if anything has been spuriously writing to 0x0.
+//
+// Returns the address 0x0 on success.
+//
+// EFI_PHYSICAL_ADDRESS is just a uint64_t.
+//
+
+EFI_PHYSICAL_ADDRESS null_alloc(void)
+{
+  // All this does is take some EfiConventionalMemory at 0x0 and add one entry to the map
+
+  // Check if UEFI marked 0x0 as EfiReservedMemoryType, because that would actually be OK.
+  EFI_MEMORY_DESCRIPTOR * Piece;
+  size_t numpages = 1; // Only need one page!
+  EFI_PHYSICAL_ADDRESS null_address = 0x0;
+
+  // Get a pointer for the descriptor corresponding to the address (scan the memory map to find it)
+  for(Piece = Global_Memory_Info.MemMap; (uint8_t*)Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize); Piece = (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize))
+  {
+    if(Piece->PhysicalStart == null_address)
+    { // Found the 0x0 entry
+      if(Piece->Type == EfiReservedMemoryType)
+      {
+        info_printf("UEFI set 0x0 to EfiReservedMemoryType: No need to explicitly set null area.\r\n");
+
+        // Because EfiReservedMemoryType has the value of 0, this could also indicate that something is wrong with the memory map.
+        if(Piece->NumberOfPages == 0) // Number of pages should never be zero. A zero-size memory map region wouldn't be on the map!
+        { // This could mean a bootloader or firmware issue. Had it happen before, which led to the discovery of a MemoryMapSize calculation error in the bootloader.
+          error_printf("Err, hold on a second. NumberOfPages should never be 0.\r\nSomething's wrong with the memory map. Check it here:\r\n");
+          print_system_memmap();
+          HaCF();
+        }
+
+        return null_address;
+      }
+      else if(Piece->Type != EfiConventionalMemory)
+      {
+        warning_printf("Warning: Something is set at null area (address 0x0).\r\nFree up the first page at address 0x0 and try again.\r\n");
+      }
+      // else we're good.
+
+      break;
+    }
+  }
+
+  if((uint8_t*)Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)) // This will be true if the loop didn't break
+  {
+    error_printf("Huh, Address 0x0 not found at PhysicalStart of any region. Unsafe to continue.\r\n");
+    printf("Memory map check:\r\n");
+    print_system_memmap();
+    HaCF();
+  }
+
+  // Ensure memmap has enough space for another descriptor
+  if(MemMap_Prep(1))
+  {
+    error_printf("null_alloc: Could not prep memory map...\r\n");
+    HaCF();
+  }
+
+  // Zero out the destination
+  AVX_memset((void*)null_address, 0, numpages << EFI_PAGE_SHIFT);
+
+  // Mark the new area as null area (it's currently EfiConventionalMemory)
+  if(Piece->NumberOfPages == numpages) // Trivial case: The new space descriptor is just the right size and needs no splitting; saves a memory descriptor so MemMapSize doesn't need to be increased
+  {
+    Piece->Type = EfiMaxMemoryType + 5; // Special Null type
+    // Nothng to do for Pad, PhysicalStart, VirtualStart, NumberOfPages, and Attribute
+  }
+  else // Need to insert a memmap descriptor. Thanks to the way ActuallyFreeAddress works we know the area is at the base of the EfiConventionalMemory descriptor
+  {
+    // Make a temporary descriptor to hold current piece's values, but modified for null area
+    EFI_MEMORY_DESCRIPTOR new_descriptor_temp;
+    new_descriptor_temp.Type = EfiMaxMemoryType + 5; // Special Null type
+    new_descriptor_temp.Pad = Piece->Pad;
+    new_descriptor_temp.PhysicalStart = Piece->PhysicalStart;
+    new_descriptor_temp.VirtualStart = Piece->VirtualStart;
+    new_descriptor_temp.NumberOfPages = numpages;
+    new_descriptor_temp.Attribute = Piece->Attribute;
+
+    // Modify this EfiConventionalMemory descriptor (shrink it) to reflect its new values
+    Piece->PhysicalStart += (numpages << EFI_PAGE_SHIFT);
+    Piece->VirtualStart += (numpages << EFI_PAGE_SHIFT);
+    Piece->NumberOfPages -= numpages;
+
+    // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
+    AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
+
+    // Insert the new piece (by overwriting the now-duplicated entry with new values)
+    // I.e. turn this piece into what was stored in the temporary descriptor above
+    Piece->Type = new_descriptor_temp.Type;
+    Piece->Pad = new_descriptor_temp.Pad;
+    Piece->PhysicalStart = new_descriptor_temp.PhysicalStart;
+    Piece->VirtualStart = new_descriptor_temp.VirtualStart;
+    Piece->NumberOfPages = new_descriptor_temp.NumberOfPages;
+    Piece->Attribute = new_descriptor_temp.Attribute;
+
+    // Update Global_Memory_Info with new MemMap size
+    Global_Memory_Info.MemMapSize += Global_Memory_Info.MemMapDescriptorSize;
+  }
+
+  // Done modifying map.
+
+  return null_address;
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -3102,7 +3234,7 @@ EFI_PHYSICAL_ADDRESS pagetable_alloc(uint64_t pagetables_size)
   EFI_MEMORY_DESCRIPTOR * Piece;
   size_t numpages = EFI_SIZE_TO_PAGES(pagetables_size);
 
-  EFI_PHYSICAL_ADDRESS pagetable_address = ActuallyFreeAddress(numpages, 0); // This will only give addresses at the base of a chunk of EfiConventionalMemory
+  EFI_PHYSICAL_ADDRESS pagetable_address = ActuallyFreeAddress(numpages, 0x1); // This will only give addresses at the base of a chunk of EfiConventionalMemory, use 0x1 because we don't want address 0x0.
   if(pagetable_address == ~0ULL)
   {
     error_printf("Not enough space for page tables. Unsafe to continue.\r\n");
@@ -3152,7 +3284,7 @@ EFI_PHYSICAL_ADDRESS pagetable_alloc(uint64_t pagetables_size)
         Piece->NumberOfPages -= numpages;
 
         // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
         // Insert the new piece (by overwriting the now-duplicated entry with new values)
         // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -3445,7 +3577,7 @@ EFI_PHYSICAL_ADDRESS AllocateFreeAddress(size_t numbytes, EFI_PHYSICAL_ADDRESS O
         Piece->NumberOfPages -= numpages;
 
         // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
         // Insert the new piece (by overwriting the now-duplicated entry with new values)
         // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -3480,7 +3612,7 @@ EFI_PHYSICAL_ADDRESS AllocateFreeAddress(size_t numbytes, EFI_PHYSICAL_ADDRESS O
         // Nothing for attribute
 
         // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
         // Insert the "new" piece (by overwriting the now-duplicated entry with old values)
         // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -3528,7 +3660,7 @@ EFI_PHYSICAL_ADDRESS AllocateFreeAddress(size_t numbytes, EFI_PHYSICAL_ADDRESS O
         // Nothing for attribute
 
         // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-        AVX_memmove((uint8_t*)Piece + 2*Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+        AVX_memmove((uint8_t*)Piece + 2*Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
         // Insert the "below" piece into this now-tripled piece
         // I.e. turn this now-tripled piece into what was stored in the "below" temporary descriptor above
@@ -3839,7 +3971,7 @@ EFI_VIRTUAL_ADDRESS VAllocateFreeAddress(size_t numbytes, EFI_VIRTUAL_ADDRESS Ol
         Piece->NumberOfPages -= numpages;
 
         // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
         // Insert the new piece (by overwriting the now-duplicated entry with new values)
         // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -3874,7 +4006,7 @@ EFI_VIRTUAL_ADDRESS VAllocateFreeAddress(size_t numbytes, EFI_VIRTUAL_ADDRESS Ol
         // Nothing for attribute
 
         // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+        AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
         // Insert the "new" piece (by overwriting the now-duplicated entry with old values)
         // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -3922,7 +4054,7 @@ EFI_VIRTUAL_ADDRESS VAllocateFreeAddress(size_t numbytes, EFI_VIRTUAL_ADDRESS Ol
         // Nothing for attribute
 
         // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-        AVX_memmove((uint8_t*)Piece + 2*Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+        AVX_memmove((uint8_t*)Piece + 2*Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
         // Insert the "below" piece into this now-tripled piece
         // I.e. turn this now-tripled piece into what was stored in the "below" temporary descriptor above
@@ -4049,11 +4181,11 @@ void MergeContiguousConventionalMemory(void)
         {
           // Found one.
           // Add this entry's pages to Piece and delete this entry.
-          Piece->NumberOfPages += Piece2-> NumberOfPages;
+          Piece->NumberOfPages += Piece2->NumberOfPages;
 
           // Zero out Piece2
           AVX_memset(Piece2, 0, Global_Memory_Info.MemMapDescriptorSize);
-          AVX_memmove(Piece2, (uint8_t*)Piece2 + Global_Memory_Info.MemMapDescriptorSize, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - ((uint8_t*)Piece2 + Global_Memory_Info.MemMapDescriptorSize));
+          AVX_memmove(Piece2, (uint8_t*)Piece2 + Global_Memory_Info.MemMapDescriptorSize, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)((uint8_t*)Piece2 + Global_Memory_Info.MemMapDescriptorSize));
 
           // Update Global_Memory_Info
           Global_Memory_Info.MemMapSize -= Global_Memory_Info.MemMapDescriptorSize;
@@ -4061,8 +4193,8 @@ void MergeContiguousConventionalMemory(void)
           // Zero out the entry that used to be at the end
           AVX_memset((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize, 0, Global_Memory_Info.MemMapDescriptorSize);
 
-          // Decrement Piece2 one descriptor to check this one again, since after modification there may be more to merge
-          Piece2 = (EFI_MEMORY_DESCRIPTOR*)((uint8_t*)Piece2 - Global_Memory_Info.MemMapDescriptorSize);
+          // Reset Piece2 to check this one again, since after modification there may be more to merge
+          Piece2 = Global_Memory_Info.MemMap;
           // Refresh PhysicalEnd with the new size
           PhysicalEnd = Piece->PhysicalStart + (Piece->NumberOfPages << EFI_PAGE_SHIFT);
         }
@@ -4103,7 +4235,7 @@ void MergeContiguousConventionalMemory(void)
         if(
             (Next_Piece->PhysicalStart != PhysicalEnd)
             ||
-            ((uint8_t*)Next_Piece == ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
+            ((uint8_t*)Next_Piece >= ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // This OR check protects against the obscure case of there being a rogue entry adjacent the end of the memory map that describes a valid EfiConventionalMemory entry
         {
           // See if PhysicalEnd matches any PhysicalStart for unordered maps
@@ -4121,7 +4253,7 @@ void MergeContiguousConventionalMemory(void)
         if(
             (Next_Piece->Type == EfiConventionalMemory)
             &&
-            (uint8_t*)Next_Piece != ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize)
+            ((uint8_t*)Next_Piece < ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize))
           ) // Check if the loop didn't break (this also covers the case where the memory map is the last valid entry in the map)
         { // Yes, we can reclaim without requiring a new entry
 
@@ -4158,7 +4290,7 @@ void MergeContiguousConventionalMemory(void)
           // No attribute change
 
           // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-          AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+          AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
           // Insert the new piece (by overwriting the now-duplicated entry with new values)
           // I.e. turn this piece into what was stored in the temporary descriptor above
@@ -4202,7 +4334,7 @@ void MergeContiguousConventionalMemory(void)
             // No attribute change
 
             // Move (copy) the whole memmap that's above this piece (including this freshly modified piece) from this piece to one MemMapDescriptorSize over
-            AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, ((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint8_t*)Piece); // Pointer math to get size
+            AVX_memmove((uint8_t*)Piece + Global_Memory_Info.MemMapDescriptorSize, Piece, (uint64_t)((uint8_t*)Global_Memory_Info.MemMap + Global_Memory_Info.MemMapSize) - (uint64_t)Piece); // Pointer math to get size
 
             // Insert the new piece (by overwriting the now-duplicated entry with new values)
             // I.e. turn this piece into what was stored in the temporary descriptor above

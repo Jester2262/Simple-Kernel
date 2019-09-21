@@ -14,6 +14,7 @@
 //
 
 #include "Kernel64.h"
+#include "avxmem.h"
 #include "font8x8.h" // This can only be included by one file since it's h-files containing initialized variables (in this case arrays)
 
 // Set the default font with this

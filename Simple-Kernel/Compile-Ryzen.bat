@@ -110,7 +110,7 @@ rem Loop through and compile the backend .c files, which are listed in c_files_w
 rem
 
 @echo %echo_stat%
-FOR /F "tokens=*" %%f IN ('type "%CurDir%\c_files_windows.txt"') DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wdouble-promotion -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%%~df%%~pf%%~nf.out" -MF"%%~df%%~pf%%~nf.d" -MT"%%~df%%~pf%%~nf.o" -o "%%~df%%~pf%%~nf.o" "%%~ff"
+FOR /F "tokens=*" %%f IN ('type "%CurDir%\c_files_windows.txt"') DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=znver1 -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%%~df%%~pf%%~nf.out" -MF"%%~df%%~pf%%~nf.d" -MT"%%~df%%~pf%%~nf.o" -o "%%~df%%~pf%%~nf.o" "%%~ff"
 @echo off
 
 rem
@@ -119,7 +119,7 @@ rem
 
 rem Using -march=znver1 here causes General Protection Faults on MinGW-w64 using GCC 8.1. It specifically appears to break AVX_memset() in some way related to alignment.
 @echo %echo_stat%
-FOR %%f IN ("%CurDir2%/startup/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -O3 -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.c"
+FOR %%f IN ("%CurDir2%/startup/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -O3 -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.c"
 @echo off
 
 rem
@@ -128,7 +128,7 @@ rem initialize the system)
 rem
 
 @echo %echo_stat%
-FOR %%f IN ("%CurDir2%/startup/*.S") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.S"
+FOR %%f IN ("%CurDir2%/startup/*.S") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.S"
 @echo off
 
 rem
@@ -136,7 +136,7 @@ rem Compile user .c files
 rem
 
 @echo %echo_stat%
-FOR %%f IN ("%CurDir2%/src/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/src/%%~nf.out" -MF"%CurDir2%/src/%%~nf.d" -MT"%CurDir2%/src/%%~nf.o" -o "%CurDir2%/src/%%~nf.o" "%CurDir2%/src/%%~nf.c"
+FOR %%f IN ("%CurDir2%/src/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/src/%%~nf.out" -MF"%CurDir2%/src/%%~nf.d" -MT"%CurDir2%/src/%%~nf.o" -o "%CurDir2%/src/%%~nf.o" "%CurDir2%/src/%%~nf.c"
 @echo off
 
 rem
@@ -183,9 +183,9 @@ rem https://insights.sei.cmu.edu/cert/2018/08/when-aslr-is-not-really-aslr---the
 rem https://sourceware.org/bugzilla/show_bug.cgi?id=19011
 rem https://sourceforge.net/p/mingw-w64/mailman/message/31034877/
 
-rem "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -s -T%LinkerScript% -nostdlib -Wl,-e,kernel_main -Wl,--dynamicbase,--export-all-symbols -Wl,--subsystem,10 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64-Ryzen.exe" @"objects.list"
+rem "%GCC_FOLDER_NAME%\bin\gcc.exe" -s -T%LinkerScript% -nostdlib -Wl,-e,kernel_main -Wl,--dynamicbase,--export-all-symbols -Wl,--subsystem,10 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64-Ryzen.exe" @"objects.list"
 @echo on
-"%GCC_FOLDER_NAME%\bin\gcc.exe" -march=znver1 -mavx2 -s -nostdlib -Wl,-e,kernel_main -Wl,--dynamicbase,--export-all-symbols -Wl,--subsystem,10 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64-Ryzen.exe" @"objects.list"
+"%GCC_FOLDER_NAME%\bin\gcc.exe" -s -nostdlib -Wl,-e,kernel_main -Wl,--dynamicbase,--export-all-symbols -Wl,--subsystem,10 -Wl,-Map=output.map -Wl,--gc-sections -o "Kernel64-Ryzen.exe" @"objects.list"
 @echo off
 rem Remove -s in the above command to keep debug symbols in the output binary.
 

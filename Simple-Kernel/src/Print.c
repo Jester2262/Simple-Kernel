@@ -59,6 +59,7 @@
  */
 
 #include "Kernel64.h"
+#include "avxmem.h"
 
 //
 // QUICK SCROLL NOTE:

@@ -148,7 +148,7 @@ I cannot make any guarantees whatsoever for earlier versions, especially with th
 
     2c. Now set the terminal to the Simple-Kernel folder and run "./Compile.sh", which should work and output Kernel64.elf in the Backend folder. *That's it!*
 
-3. Looks like we need to build GCC & Binutils. Navigate to the "Backend" folder in terminal and do "git clone git://gcc.gnu.org/git/gcc.git" there. This will download a copy of GCC 8.0.0, which is necessary for "static-pie" support (when combined with Binutils 2.29.1 or later, it allows  statically-linked, position-independent executables to be created; earlier versions do not). If that git link ever changes, you'll need to find wherever the official GCC git repository ran off to.
+3. Looks like we need to build GCC & Binutils. Navigate to the "Backend" folder in terminal and do "git clone git://gcc.gnu.org/git/gcc.git" there. This will download a copy of the latest GCC, which is necessary for "static-pie" support (when combined with Binutils 2.29.1 or later, it allows  statically-linked, position-independent executables to be created; earlier versions do not). If that git link ever changes, you'll need to find wherever the official GCC git repository ran off to.
 
 4. Once GCC has been cloned, in the cloned folder do "contrib/download_prerequisites" and then "./configure -v --build=x86_64-linux-gnu --host=x86_64-linux-gnu --target=x86_64-linux-gnu --prefix=$PWD/../gcc-8 --enable-checking=release --enable-languages=c --disable-multilib"
 
@@ -199,7 +199,7 @@ V0.x (2/2/2018) - Initial upload of environment and compilable sample. Not yet g
 - [Marcel Sondaar](https://mysticos.combuster.nl/) for the original public domain 8x8 font
 - [Daniel Hepper](https://github.com/dhepper/) for converting the 8x8 font into [public domain C headers](https://github.com/dhepper/font8x8)
 - [James Molloy](http://www.jamesmolloy.co.uk/tutorial_html/) for [demonstrating assembly macros for use in generating hundreds of interrupts](http://www.jamesmolloy.co.uk/tutorial_html/4.-The%20GDT%20and%20IDT.html)
-- [Intel Corporation](https://www.intel.com/content/www/us/en/homepage.html) for EfiTypes.h, the x86-64 EfiBind.h, and EfiError.h (the ones used in this project are derived from [TianoCore EDK II](https://github.com/tianocore/edk2/))
+- [Intel Corporation](https://www.intel.com/content/www/us/en/homepage.html) for EfiTypes.h, the x86-64 EfiBind.h, and EfiError.h (the ones used in this project are derived from [TianoCore EDK II](https://github.com/tianocore/edk2/)), and for [ACPICA](https://www.acpica.org) used for power management, shutdown features, etc.
 - [UEFI Forum](http://www.uefi.org/) for the [UEFI Specification Version 2.7 (Errata A)](http://www.uefi.org/sites/default/files/resources/UEFI%20Spec%202_7_A%20Sept%206.pdf), as well as for [previous UEFI 2.x specifications](http://www.uefi.org/specifications)
 - [PhoenixWiki](http://wiki.phoenix.com/wiki/index.php/Category:UEFI) for very handy documentation on UEFI functions
 - [The GNU project](https://www.gnu.org/home.en.html) for [GCC](https://gcc.gnu.org/), a fantastic and versatile compiler, and [Binutils](https://www.gnu.org/software/binutils/), equally fantastic binary utilities
