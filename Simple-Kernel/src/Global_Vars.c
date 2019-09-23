@@ -141,3 +141,11 @@ GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info = {1, 1, NULL, 1, 0};
 //----------------------------------------------------------------------------------------------------------------------------------
 // Misc
 //----------------------------------------------------------------------------------------------------------------------------------
+
+// UEFI Configuration Tables
+const EFI_GUID MpsTableGuid = MPS_TABLE_GUID;
+const EFI_GUID Acpi10TableGuid = ACPI_10_TABLE_GUID;
+const EFI_GUID Acpi20TableGuid = ACPI_20_TABLE_GUID;
+const EFI_GUID SmbiosTableGuid = SMBIOS_TABLE_GUID;
+const EFI_GUID Smbios3TableGuid = SMBIOS3_TABLE_GUID;
+const EFI_GUID SalSystemTableGuid = SAL_SYSTEM_TABLE_GUID;

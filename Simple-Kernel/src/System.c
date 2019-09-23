@@ -122,8 +122,7 @@ __attribute__((target("no-sse"))) void System_Init(LOADER_PARAMS * LP)
   printf("Global RSDP found and set. Address: %#qx\r\n", Global_RSDP_Address);
 
   // TODO enabling multicore stuff goes here, before interrupts
-//  print_system_memmap();
-//  HaCF();
+
   // Enable Maskable Interrupts
   // Exceptions and Non-Maskable Interrupts are always enabled.
 //  Enable_Maskable_Interrupts();
@@ -3953,6 +3952,52 @@ void AVX_regdump(XSAVE_AREA_LAYOUT * layout_area)
   printf("ST/MM7: 0x%016qx%016qx\r\n", layout_area->st_mm_7[1], layout_area->st_mm_7[0]);
 #endif
 }
+
+//----------------------------------------------------------------------------------------------------------------------------------
+//  UEFI_Reset: Shutdown or Reboot via UEFI
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This calls UEFI-provided shutdown and reboot functions. Not all systems provide these and may rely on ACPI instead, but there do
+// exist systems that only provide UEFI reset functionality instead of ACPI. There are also systems that support both.
+//
+// Available reset types are:
+// - EfiResetCold - Cold Reboot (essentially a hard power cycle)
+// - EfiResetWarm - Warm Reboot
+// - EfiResetShutdown - Shutdown
+//
+// There is also EfiResetPlatformSpecific, but that's not really important (instead of NULL, it takes a standard 128-bit EFI_GUID as
+// ResetData for a custom reset type).
+//
+
+void UEFI_Reset(LOADER_PARAMS * LP, EFI_RESET_TYPE ResetType)
+{
+  if((uint64_t)LP->RTServices->ResetSystem) // Make sure the pointer isn't NULL or 0x0
+  {
+    asm volatile ("cli"); // Clear interrupts
+
+    if(ResetType == EfiResetCold)
+    {
+      LP->RTServices->ResetSystem(EfiResetCold, EFI_SUCCESS, 0, NULL); // Hard reboot the system - the familiar restart
+    }
+    else if(ResetType == EfiResetWarm)
+    {
+      LP->RTServices->ResetSystem(EfiResetWarm, EFI_SUCCESS, 0, NULL); // Soft reboot the system
+    }
+    else if(ResetType == EfiResetShutdown)
+    {
+      LP->RTServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL); // Shutdown the system
+    }
+    else
+    {
+      error_printf("Error: Invalid ResetType provided.\r\n");
+    }
+  }
+  else
+  {
+    info_printf("UEFI ResetSystem not supoprted.\r\n");
+  }
+}
+
 
 //----------------------------------------------------------------------------------------------------------------------------------
 //  HaCF: "Halt and Catch Fire"

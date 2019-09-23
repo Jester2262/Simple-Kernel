@@ -48,7 +48,10 @@ typedef EFI_GUID GUID; // Defining it here instead. This allows SmBios.h to be r
 
 #include "ISR.h"
 
-// GRAPHICS
+//
+// Graphics
+//
+
 typedef struct {
   UINT32            RedMask;
   UINT32            GreenMask;
@@ -137,7 +140,7 @@ EFI_STATUS
     );
 
 //
-// EFI platform varibles
+// EFI Platform Variables
 //
 
 #define EFI_GLOBAL_VARIABLE     \
@@ -358,13 +361,6 @@ typedef struct {
 #define SAL_SYSTEM_TABLE_GUID    \
     { 0xeb9d2d32, 0x2d88, 0x11d3, {0x9a, 0x16, 0x0, 0x90, 0x27, 0x3f, 0xc1, 0x4d} }
 
-static const EFI_GUID MpsTableGuid = MPS_TABLE_GUID;
-static const EFI_GUID Acpi10TableGuid = ACPI_10_TABLE_GUID;
-static const EFI_GUID Acpi20TableGuid = ACPI_20_TABLE_GUID;
-static const EFI_GUID SmbiosTableGuid = SMBIOS_TABLE_GUID;
-static const EFI_GUID Smbios3TableGuid = SMBIOS3_TABLE_GUID;
-static const EFI_GUID SalSystemTableGuid = SAL_SYSTEM_TABLE_GUID;
-
 typedef struct _EFI_CONFIGURATION_TABLE {
     EFI_GUID                VendorGuid;
     VOID                    *VendorTable;
@@ -414,9 +410,9 @@ typedef struct {
   UINTN                     Number_of_ConfigTables;         // The number of system configuration tables
 } LOADER_PARAMS;
 
-// END UEFI and Bootloader functions, definitions, and declarations
-
 __attribute__((naked)) void kernel_main(LOADER_PARAMS * LP);
+
+// END UEFI and Bootloader functions, definitions, and declarations
 
 //==================================================================================================================================
 // Anything below this comment (except the #endif at the very bottom) is safe to  remove without breaking compatibility with the
@@ -648,6 +644,12 @@ extern TSC_FREQUENCY_STRUCT Global_TSC_frequency;
 extern GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info;
 extern GLOBAL_PRINT_INFO_STRUCT Global_Print_Info;
 
+extern const EFI_GUID MpsTableGuid;
+extern const EFI_GUID Acpi10TableGuid;
+extern const EFI_GUID Acpi20TableGuid;
+extern const EFI_GUID SmbiosTableGuid;
+extern const EFI_GUID Smbios3TableGuid;
+extern const EFI_GUID SalSystemTableGuid;
 //----------------------------------------------------------------------------------------------------------------------------------
 //  Function Prototypes
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -655,7 +657,10 @@ extern GLOBAL_PRINT_INFO_STRUCT Global_Print_Info;
 // All functions defined by files in the "src" folder
 //
 
+//----------------------------------------------------------------------------------------------------------------------------------
 // Initialization-related functions (System.c)
+//----------------------------------------------------------------------------------------------------------------------------------
+
 void System_Init(LOADER_PARAMS * LP);
 
 uint64_t get_tick(void);
@@ -697,7 +702,7 @@ char * Get_Brandstring(uint32_t * brandstring); // "brandstring" must be a 48-by
 char * Get_Manufacturer_ID(char * Manufacturer_ID); // "Manufacturer_ID" must be a 13-byte array
 void cpu_features(uint64_t rax_value, uint64_t rcx_value);
 
- // For interrupt handling
+  // For interrupt handling
 void User_ISR_handler(INTERRUPT_FRAME * i_frame); // ACPI uses this, too
 void CPU_ISR_handler(INTERRUPT_FRAME * i_frame);
 void CPU_EXC_handler(EXCEPTION_FRAME * e_frame);
@@ -735,17 +740,24 @@ void SX_EXC_handler(EXCEPTION_FRAME * e_frame); // Fault #SX: Security Exception
   // Special user-defined handlers
 // (none yet!)
 
- // Interrupt support functions
+  // Interrupt support functions
 void ISR_regdump(INTERRUPT_FRAME * i_frame);
 void EXC_regdump(EXCEPTION_FRAME * e_frame);
 void AVX_regdump(XSAVE_AREA_LAYOUT * layout_area);
 
-// NOTE: Not in System.c, these functions are in Kernel64.c.
+//----------------------------------------------------------------------------------------------------------------------------------
+// General System Information Functions (Kernel64.c)
+//----------------------------------------------------------------------------------------------------------------------------------
+
+// kernel_main() is not listed here because it's the main entry point and does not need a prototype.
 void Print_All_CRs_and_Some_Major_CPU_Features(void);
 void Print_Loader_Params(LOADER_PARAMS * LP);
 void Print_Segment_Registers(void);
 
+//----------------------------------------------------------------------------------------------------------------------------------
 // Memory-related functions (Memory.c)
+//----------------------------------------------------------------------------------------------------------------------------------
+
 uint8_t VerifyZeroMem(size_t NumBytes, uint64_t BaseAddr); // BaseAddr is a 64-bit unsigned int whose value is the memory address to verify
 uint64_t GetMaxMappedPhysicalAddress(void);
 uint64_t GetVisibleSystemRam(void);
@@ -804,7 +816,10 @@ EFI_VIRTUAL_ADDRESS VActuallyAlignedFreeAddress(size_t pages, EFI_VIRTUAL_ADDRES
 
 EFI_VIRTUAL_ADDRESS VAllocateFreeAddress(size_t numbytes, EFI_VIRTUAL_ADDRESS OldAddress, uintmax_t byte_alignment);
 
+//----------------------------------------------------------------------------------------------------------------------------------
 // Drawing-related functions (Display.c)
+//----------------------------------------------------------------------------------------------------------------------------------
+
 void Blackscreen(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU);
 void Colorscreen(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 color);
 
@@ -835,7 +850,10 @@ void bitmap_bitswap(const unsigned char * bitmap, UINT32 height, UINT32 width, u
 void bitmap_bitreverse(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output);
 void bitmap_bytemirror(const unsigned char * bitmap, UINT32 height, UINT32 width, unsigned char * output);
 
+//----------------------------------------------------------------------------------------------------------------------------------
 // Text-related functions (Display.c)
+//----------------------------------------------------------------------------------------------------------------------------------
+
 void Initialize_Global_Printf_Defaults(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU);
 
 void single_char(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color);
@@ -846,7 +864,9 @@ void string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, const char * 
 void formatted_string_anywhere_scaled(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, const char * string, ...);
 void Output_render_text(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GPU, int character, UINT32 width, UINT32 height, UINT32 font_color, UINT32 highlight_color, UINT32 x, UINT32 y, UINT32 xscale, UINT32 yscale, UINT32 index);
 
-// Printf-related functions (Print.c)
+//----------------------------------------------------------------------------------------------------------------------------------
+// Print-related functions (Print.c)
+//----------------------------------------------------------------------------------------------------------------------------------
 
 #ifndef ACKERNEL64
 // These 3 conflict with ACPICA's internal versions, so special case them
@@ -869,12 +889,21 @@ int info_printf(const char *fmt, ...);
 void print_utf16_as_utf8(CHAR16 * strung, UINT64 size);
 char * UCS2_to_UTF8(CHAR16 * strang, UINT64 size);
 
+//----------------------------------------------------------------------------------------------------------------------------------
+// ACPI-related functions (acKernel64.c)
+//----------------------------------------------------------------------------------------------------------------------------------
+
 ACPI_STATUS InitializeFullAcpi(void);
 ACPI_STATUS Quit_ACPI(void);
 ACPI_STATUS InitializeAcpiTablesOnly(void);
 ACPI_STATUS InitializeAcpiAfterTables(void);
+
+// Shutdown and restart via ACPI
 void ACPI_Shutdown(void);
-void ACPI_Standby(void);
+void ACPI_Reboot(void);
+
+// Shutdown and restart via UEFI (this one is actually in System.c)
+void UEFI_Reset(LOADER_PARAMS * LP, EFI_RESET_TYPE ResetType); // Options: EfiResetShutdown, EfiResetCold, EfiResetWarm
 
 // Don't remove this #endif
 #endif /* _Kernel64_H */

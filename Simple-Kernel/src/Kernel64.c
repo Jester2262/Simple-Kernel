@@ -165,7 +165,7 @@ const unsigned char load_image3[144] = {
 //
 
 // Can't use local arrays in a naked function (at least, the compiler won't allow it, though it can be done with assembly)
-// They'll just need to take up some program RAM as global variables instead of stack space.
+// They'd just need to take up some program RAM as global variables instead of stack space.
 
 // __attribute__((naked)) goes in front of declaration (prototype in header, for example)
 // See https://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html or https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/4/html/Using_the_GNU_Compiler_Collection/function-attributes.html
@@ -218,8 +218,6 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 
   uint64_t end_time = get_tick();
   printf("Result: start: %qu end: %qu diff: %qu\r\n", start_time, end_time, end_time - start_time);
-
-  asm volatile ("hlt");
 
   Draw_vector(Global_Print_Info.defaultGPU, 500, 500, 500, 700, 0x000000FF); // |
   Draw_vector(Global_Print_Info.defaultGPU, 500, 500, 700, 500, 0x000000FF); // --
@@ -307,66 +305,7 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 
 //  Print_All_CRs_and_Some_Major_CPU_Features(); // The output from this will fill up a 768 vertical resolution screen with an 8 height font set to yscale factor 1.
 
-  // ASM so that GCC doesn't mess with this loop. This is about as optimized this can get.
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop0:\n\t"
-                "addl $1, %%eax\n\t"
-                "testl %%eax, %%eax\n\t"
-                "jne Loop0\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
-
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop7:\n\t"
-                "addl $1, %%eax\n\t"
-                "testl %%eax, %%eax\n\t"
-                "jne Loop7\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
-
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop8:\n\t"
-                "addl $1, %%eax\n\t"
-                "testl %%eax, %%eax\n\t"
-                "jne Loop8\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
-
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop9:\n\t"
-                "addl $1, %%eax\n\t"
-                "testl %%eax, %%eax\n\t"
-                "jne Loop9\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
-
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop10:\n\t"
-                "addl $1, %%eax\n\t"
-                "testl %%eax, %%eax\n\t"
-                "jne Loop10\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
-
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop11:\n\t"
-                "addl $1, %%eax\n\t"
-                "testl %%eax, %%eax\n\t"
-                "jne Loop11\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
+  ssleep(6);
 
   Colorscreen(LP->GPU_Configs->GPUArray[0], 0x000000FF); // Blue in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
   single_char(LP->GPU_Configs->GPUArray[0], '?', 8, 8, 0x00FFFFFF, 0x00000000);
@@ -376,30 +315,14 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   single_char_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 'X', 8, 8, 0xFF000000, 0x00FFFFFF, 50, 10, 5, 5); // transparent font
   string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "Is it soup?", 8, 8, 0x00FFFFFF, 0x00000000, 10, 40, 1, 1);
 
-  // ASM so that GCC doesn't mess with this loop. This is about as optimized this can get.
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop1:\n\t"
-                "addl $1, %%eax\n\t"
-                "jnz Loop1\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
+  ssleep(1);
 
   Colorscreen(LP->GPU_Configs->GPUArray[0], 0x0000FF00); // Green in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
   single_char(LP->GPU_Configs->GPUArray[0], 'A', 8, 8, 0x00FFFFFF, 0x00000000);
   single_char_anywhere(LP->GPU_Configs->GPUArray[0], '!', 8, 8, 0x00FFFFFF, 0xFF000000, (LP->GPU_Configs->GPUArray[0].Info->HorizontalResolution >> 2), LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/3);
   string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "Is it really soup?", 8, 8, 0x00FFFFFF, 0x00000000, 50, 50, 3, 3);
 
-  // ASM so that GCC doesn't mess with this loop. This is about as optimized this can get.
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop2:\n\t"
-                "addl $1, %%eax\n\t"
-                "jnz Loop2\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
+  ssleep(1);
 
   Colorscreen(LP->GPU_Configs->GPUArray[0], 0x00FF0000); // Red in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
   printf("PRINTF!! 0x%qx", LP->GPU_Configs->GPUArray[0].FrameBufferBase);
@@ -419,33 +342,7 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   printf("This printf shouldn't move due to formatted string invocation.");
   single_char(LP->GPU_Configs->GPUArray[0], '2', 8, 8, 0x00FFFFFF, 0xFF000000);
 
-  // ASM so that GCC doesn't mess with this loop. This is about as optimized this can get.
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop3:\n\t"
-                "addl $1, %%eax\n\t"
-                "jnz Loop3\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
-
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop5:\n\t"
-                "addl $1, %%eax\n\t"
-                "jnz Loop5\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
-
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop6:\n\t"
-                "addl $1, %%eax\n\t"
-                "jnz Loop6\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
+  ssleep(3);
 
   Blackscreen(LP->GPU_Configs->GPUArray[0]); // X in BGRX (X = reserved, technically an "empty alpha channel" for 32-bit memory alignment)
   single_pixel(LP->GPU_Configs->GPUArray[0], LP->GPU_Configs->GPUArray[0].Info->HorizontalResolution >> 2, LP->GPU_Configs->GPUArray[0].Info->VerticalResolution >> 2, 0x00FFFFFF);
@@ -454,21 +351,13 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   single_char_anywhere_scaled(LP->GPU_Configs->GPUArray[0], 'I', 8, 8, 0x00FFFFFF, 0xFF000000, 10, 10, 2, 2);
   string_anywhere_scaled(LP->GPU_Configs->GPUArray[0], "OMG it's actually soup! I don't believe it!!", 8, 8, 0x00FFFFFF, 0x00000000, 0, LP->GPU_Configs->GPUArray[0].Info->VerticalResolution/2, 2, 2);
 
-  // ASM so that GCC doesn't mess with this loop. This is about as optimized this can get.
-  asm volatile("movl $1, %%eax\n\t" // Loop ends on overflow
-                "Loop4:\n\t"
-                "addl $1, %%eax\n\t"
-                "jnz Loop4\n\t" // Count to 2^32, which is about 1 second at 4 GHz. 2^64 is... still insanely long.
-                : // no outputs
-                : // no inputs
-                : "%eax" // clobbers
-              );
+  ssleep(1);
 
-  // For shutdown, need to know if system is ACPI hardware-reduced or using legacy ACPI. There's a flag in FADT.
   Global_Print_Info.xscale = 1;
   Global_Print_Info.yscale = 1; // Output scale for systemfont used by printf
   Global_Print_Info.textscrollmode = Global_Print_Info.height*Global_Print_Info.yscale; // Readjust quick scrolling
 
+  // For shutdown, need to know if system is ACPI hardware-reduced or using legacy ACPI. There's a flag in FADT.
   int is_hardware_reduced_ACPI = 0;
   XSDT_STRUCT * xsdt = (XSDT_STRUCT*) ((RSDP_20_STRUCT *)Global_RSDP_Address)->XSDTAddress;
 
@@ -492,7 +381,7 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   }
 
   // EFI ResetSystem() isn't always implemented. It doesn't appear to be on my Dell--in fact, invoking it causes data near address 0x0 to be loaded
-  // into %rip, which then page faults because it loads a value of 0x7ff00000000, which would be 8188GB RAM. Fun fact: I only have 32GB. Page Fault!
+  // into %rip, which then page faults because it loads a value of 0x7ff00000000, which would be 8188GB RAM. Fun fact: I only have 32GB.
   // Since this happens even when ResetSystem() is called right after ExitBootServices() (or even when no VMAP or paging has been set), this
   // is squarely a firmware fault. This is why:
   // https://docs.microsoft.com/en-us/windows-hardware/design/device-experiences/oem-uefi#runtime-requirements
@@ -500,14 +389,14 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 
   if(is_hardware_reduced_ACPI) // Check HW_REDUCED_ACPI Flag in FADT, as HW-reduced ACPI mode uses EFI shutdown
   {
-    LP->RTServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL); // Shutdown the system
+    UEFI_Reset(LP, EfiResetShutdown); // Shutdown the system
   }
   else
   {
     ACPI_Shutdown();
 
     // Well if that didn't work...
-    LP->RTServices->ResetSystem(EfiResetShutdown, EFI_SUCCESS, 0, NULL); // Shutdown the system
+    UEFI_Reset(LP, EfiResetShutdown); // Shutdown the system
   }
 
   error_printf("What? Can this thing not shut down on its own?? Please force power off.\r\n");
@@ -759,23 +648,3 @@ void Print_Segment_Registers(void)
 ////////////////////////////////////////////////////
 
 // TODO: keyboard driver (PS/2 for starters, then USB)
-
-/*
-Note:
-
-typedef enum {
-  EfiResetCold, // Cold Reboot (essentially a hard power cycle)
-  EfiResetWarm, // Warm reboot
-  EfiResetShutdown // Uh, normal shutdown
-} EFI_RESET_TYPE;
-
-typedef
-VOID
-ResetSystem (IN EFI_RESET_TYPE ResetType, IN EFI_STATUS ResetStatus, IN UINTN DataSize, IN VOID *ResetData OPTIONAL);
-
-RT->ResetSystem (EfiResetShutdown, EFI_SUCCESS, 0, NULL); // Shutdown the system
-RT->ResetSystem (EfiResetCold, EFI_SUCCESS, 0, NULL); // Hard reboot the system - the familiar restart
-RT->ResetSystem (EfiResetWarm, EFI_SUCCESS, 0, NULL); // Soft reboot the system -
-
-There is also EfiResetPlatformSpecific, but that's not really important. (Takes a standard 128-bit EFI_GUID as ResetData for a custom reset type)
-*/
