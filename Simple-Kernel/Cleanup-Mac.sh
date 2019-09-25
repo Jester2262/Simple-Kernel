@@ -2,7 +2,7 @@
 #
 # =================================
 #
-# RELEASE VERSION 1.11
+# RELEASE VERSION 1.2
 #
 # GCC/Clang Kernel64 Mac Cleanup Script
 #
@@ -18,7 +18,7 @@ set +v
 #
 
 echo
-echo "Running cleanup procedures; press CTRL+C to exit now. Otherwise..."
+echo "Running cleanup procedures: press CTRL+C to exit now. Otherwise..."
 read -n1 -r -p "Press any key to continue..."
 
 #

@@ -2,7 +2,7 @@
 #
 # =================================
 #
-# RELEASE VERSION 1.11
+# RELEASE VERSION 1.2
 #
 # GCC/Clang Kernel64 Mac Compile Script
 #
@@ -83,7 +83,7 @@ done < $CurDir/h_files.txt
 set -v
 while read f; do
   echo "gcc" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=skylake -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
-  "gcc" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=skylake -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f"
+  "gcc" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=skylake -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "$f" &
 done < $CurDir/c_files_mac.txt
 set +v
 
@@ -94,7 +94,7 @@ set +v
 set -v
 for f in $CurDir/startup/*.c; do
   echo "gcc" -march=skylake -mavx2 -m64 -mno-red-zone -O3 -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
-  "gcc" -march=skylake -mavx2 -m64 -mno-red-zone -O3 -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  "gcc" -march=skylake -mavx2 -m64 -mno-red-zone -O3 -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c" &
 done
 set +v
 
@@ -106,14 +106,14 @@ set +v
 #set -v
 #for f in $CurDir/startup/*.S; do
 #  echo "as" -64 -I"$CurDir/inc/" -g -o "${f%.*}.o" "${f%.*}.S"
-#  "as" -64 -I"$CurDir/inc/" -g -o "${f%.*}.o" "${f%.*}.S"
+#  "as" -64 -I"$CurDir/inc/" -g -o "${f%.*}.o" "${f%.*}.S" &
 #done
 #set +v
 
 set -v
 for f in $CurDir/startup/*.S; do
   echo "gcc" -march=skylake -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
-  "gcc" -march=skylake -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S"
+  "gcc" -march=skylake -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.S" &
 done
 set +v
 
@@ -124,9 +124,19 @@ set +v
 set -v
 for f in $CurDir/src/*.c; do
   echo "gcc" -march=skylake -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
-  "gcc" -march=skylake -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c"
+  "gcc" -march=skylake -mavx2 -m64 -mno-red-zone -Og -ffreestanding -fpie -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-stack-protector $HFILES -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -MF"${f%.*}.d" -MT"${f%.*}.o" -o "${f%.*}.o" "${f%.*}.c" &
 done
 set +v
+
+#
+# Wait for compilation to complete
+#
+
+echo
+echo Waiting for compilation to complete...
+echo
+
+wait
 
 #
 # Create the objects.list file, which contains properly-formatted (i.e. has

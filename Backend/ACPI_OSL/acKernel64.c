@@ -466,19 +466,19 @@ ACPI_STATUS AcpiOsReadMemory(ACPI_PHYSICAL_ADDRESS Address, UINT64 *Value, UINT3
   *Value = 0; // Spec says zero-extended
   if(Width == 8)
   {
-    *Value = *(UINT8*)Address;
+    *Value = *(volatile UINT8*)Address;
   }
   else if(Width == 16)
   {
-    *Value = *(UINT16*)Address;
+    *Value = *(volatile UINT16*)Address;
   }
   else if(Width == 32)
   {
-    *Value = *(UINT32*)Address;
+    *Value = *(volatile UINT32*)Address;
   }
   else if(Width == 64)
   {
-    *Value = *(UINT64*)Address;
+    *Value = *(volatile UINT64*)Address;
   }
   else
   {
@@ -493,19 +493,19 @@ ACPI_STATUS AcpiOsWriteMemory(ACPI_PHYSICAL_ADDRESS Address, UINT64 Value, UINT3
   // Likewise
   if(Width == 8)
   {
-    *(UINT8*)Address = (UINT8)Value;
+    *(volatile UINT8*)Address = (UINT8)Value;
   }
   else if(Width == 16)
   {
-    *(UINT16*)Address = (UINT16)Value;
+    *(volatile UINT16*)Address = (UINT16)Value;
   }
   else if(Width == 32)
   {
-    *(UINT32*)Address = (UINT32)Value;
+    *(volatile UINT32*)Address = (UINT32)Value;
   }
   else if(Width == 64)
   {
-    *(UINT64*)Address = Value;
+    *(volatile UINT64*)Address = Value;
   }
   else
   {
@@ -556,7 +556,7 @@ ACPI_STATUS AcpiOsWritePort(ACPI_IO_ADDRESS Address, UINT32 Value, UINT32 Width)
 // PciId should be *PciId
 ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID *PciId, UINT32 Register, UINT64 *Value, UINT32 Width)
 {
-  // Somewhere over the rainbow, MMIO & MCFG table is needed for PCIe Extended Config Space access
+  // Somewhere over the rainbow, MMIO with MCFG table is needed for PCIe Extended Config Space access
   // That'll need AcpiGetTable() & AcpiPutTable()
   // This might be useful to look at for an example:
   // http://mirror.nyi.net/NetBSD/NetBSD-release-7/src/sys/dev/acpi/acpica/OsdHardware.c

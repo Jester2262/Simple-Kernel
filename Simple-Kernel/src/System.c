@@ -121,6 +121,9 @@ __attribute__((target("no-sse"))) void System_Init(LOADER_PARAMS * LP)
   Find_RSDP(LP);
   printf("Global RSDP found and set. Address: %#qx\r\n", Global_RSDP_Address);
 
+  Enable_Local_x2APIC(); // TODO This needs to be done per core
+  // It has a printf in it
+
   // TODO enabling multicore stuff goes here, before interrupts
 
   // Enable Maskable Interrupts
@@ -546,6 +549,63 @@ __attribute__((target("no-sse"))) void Enable_AVX(void)
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
+// Enable_Local_x2APIC: Enable Core's Local x2APIC
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// The APIC is already enabled by UEFI--it has to be, since BSP and AP init is handled by firmware. The x2APIC, however, may not be,
+// and that's the one we want on supported CPUs to handle interrupts. Unlike prior APICs, the x2APIC uses MSRs instead of MMIO to
+// access interrupt-related registers, which is faster (no memory accesses). It is also easier to use, as it removes the Destination
+// Format Register and the 128-bit alignment mapping for 32-bit registers, among other changes. See Chapter 10.12.1.2 "x2APIC
+// Register Address Space" in the Intel Architecture Manual, Volume 3A for more details and for descriptions of each x2APIC MSR.
+//
+// A later section of the manual (Ch. 10.12.5.1 x2APIC States) also has this: "On coming out of reset, the local APIC unit is enabled
+// and is in the xAPIC mode: IA32_APIC_BASE[EN]=1 and IA32_APIC_BASE[EXTD]=0. The APIC registers are initialized as follows..."
+//
+// It also appears that all CPUs with AVX also have x2APICs, which is nice.
+//
+
+void Enable_Local_x2APIC(void)
+{
+  // IA32_APIC_BASE_MSR is 0x1B
+  // The MMIO base address of the local xAPIC can be remapped by writing a new base address to this MSR, if in APIC mode.
+  // NOTE: To disable x2APIC mode, set both bit 11 and bit 10 in IA32_APIC_BASE_MSR to 0--the whole APIC needs to be software
+  // disabled in order to transition to the older xAPIC mode. This shouldn't be necessary on supported CPUs, however.
+
+  uint64_t rcx = 0;
+  asm volatile("cpuid"
+               : "=c" (rcx) // Outputs
+               : "a" (0x01) // The value to put into %rax
+               : "%rbx", "%rdx" // CPUID clobbers all not-explicitly-used abcd registers
+             );
+
+  if(rcx & (1ULL << 21))
+  {
+    uint64_t ApicBaseMsr = msr_rw(0x1B, 0, 0);
+    printf("Apic Base Register: %llx\r\n", ApicBaseMsr);
+    if(ApicBaseMsr & (1ULL << 10))
+    {
+      info_printf("Local x2APIC already enabled on core.\r\n"); // TODO: add a way to get core number/ID for these printfs
+    }
+    else
+    {
+      msr_rw(0x1B, ApicBaseMsr | (1ULL << 10), 1);
+      if(msr_rw(0x1B, 0, 0) & (1ULL << 10))
+      {
+        printf("Local x2APIC enabled on core.\r\n");
+      }
+      else
+      {
+        warning_printf("Could not enable local x2APIC on core. Interrupts will not be available.\r\n");
+      }
+    }
+  }
+  else
+  {
+    warning_printf("Local x2APIC not supported on core.\r\n");
+  }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
 // Enable_Maskable_Interrupts: Load Interrupt Descriptor Table and Enable Interrupts
 //----------------------------------------------------------------------------------------------------------------------------------
 //
@@ -556,14 +616,14 @@ __attribute__((target("no-sse"))) void Enable_AVX(void)
 void Enable_Maskable_Interrupts(void)
 {
   uint64_t rflags = control_register_rw('f', 0, 0);
-  if(rflags & (1 << 9))
+  if(rflags & (1ULL << 9))
   {
     // Interrupts are already enabled, do nothing.
     info_printf("Interrupts are already enabled.\r\n");
   }
   else
   {
-    uint64_t rflags2 = rflags | (1 << 9); // Set bit 9
+    uint64_t rflags2 = rflags | (1ULL << 9); // Set bit 9
 
     control_register_rw('f', rflags2, 1);
     rflags2 = control_register_rw('f', 0, 0);
@@ -598,16 +658,17 @@ void Enable_HWP(void)
                : "%rbx", "%rcx", "%rdx" // CPUID clobbers all not-explicitly-used abcd registers
              );
 
-  if(rax & (1 << 7)) // HWP is available
+  if(rax & (1ULL << 7)) // HWP is available
   {
-    if(msr_rw(0x770, 0, 0) & 1)
+    uint64_t HWP_State = msr_rw(0x770, 0, 0);
+    if(HWP_State & 0x1)
     {
       info_printf("HWP is already enabled.\r\n");
     }
     else
     {
-      msr_rw(0x770, 1, 1);
-      if(msr_rw(0x770, 0, 0) & 1)
+      msr_rw(0x770, HWP_State | 0x1, 1);
+      if(msr_rw(0x770, 0, 0) & 0x1)
       {
         printf("HWP enabled.\r\n");
       }
@@ -808,6 +869,14 @@ void msleep(uint64_t Milliseconds)
 //
 // Wait for the specified time in microseconds
 //
+
+// Accuracy Notes:
+// At around 200-300 cycles per 100ns (2-3GHz), a divide is still plenty fast enough for this to be A-OK.
+// A worst-case 64-bit integer divide can be up to ~100 cycles, so this can issue at least 20 divides in one microsecond on
+// supported CPUs. That gives a worst-case error bound of roughly 1/20 microseconds. In most cases it's probably better (2-3x), but
+// it depends on the cycle latency & reciprocal throughput of the CPU architecture. Some might only have an error of 1/60 microseconds,
+// or even 1/100. See Document 4 "Instruction Tables" at https://www.agner.org/optimize/ for divide latencies for various architectures.
+// If a more exact error bound is needed, profile it/measure it on the system in question. Can't beat that kind of data!
 
 void usleep(uint64_t Microseconds)
 {

@@ -3,7 +3,7 @@
 rem
 rem =================================
 rem
-rem VERSION 1.11
+rem VERSION 1.2
 rem
 rem GCC (MinGW-w64) Kernel64 Windows Compile Script
 rem
@@ -68,6 +68,13 @@ rem
 set PATH=%CD%\%GCC_FOLDER_NAME%\bin;%PATH%
 
 rem
+rem Make temporary ASCII-formatted text files for command interpreter
+rem
+
+type "%CurDir%\c_files_windows.txt" > "%CurDir%\c_files_windows_temp.txt"
+type "%CurDir%\h_files.txt" > "%CurDir%\h_files_temp.txt"
+
+rem
 rem For debugging this script, this echo helps ensure the path is set correctly
 rem
 
@@ -88,7 +95,7 @@ rem
 rem Loop through the h_files.txt file and turn each include directory into -I strings
 rem
 
-FOR /F "tokens=*" %%h IN ('type "%CurDir%\h_files.txt"') DO set HFILES=!HFILES! -I"%%h"
+FOR /F "usebackq tokens=*" %%h IN ("%CurDir%\h_files_temp.txt") DO set HFILES=!HFILES! -I"%%h"
 
 rem
 rem Windows uses backslashes. GCC and *nix-based things expect forward slashes.
@@ -108,9 +115,12 @@ rem pause
 rem
 rem Loop through and compile the backend .c files, which are listed in c_files_windows.txt
 rem
+rem Note that Windows has 9 command streams, so per this approach stream 9 can be redirected for each process to hold a lock file.
+rem https://stackoverflow.com/questions/18758502/wait-for-multiple-applications-run-asynchronously-from-batch-file-to-finish/18759831
+rem
 
 @echo %echo_stat%
-FOR /F "tokens=*" %%f IN ('type "%CurDir%\c_files_windows.txt"') DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%%~df%%~pf%%~nf.out" -MF"%%~df%%~pf%%~nf.d" -MT"%%~df%%~pf%%~nf.o" -o "%%~df%%~pf%%~nf.o" "%%~ff"
+FOR /F "usebackq tokens=*" %%f IN ("%CurDir%\c_files_windows_temp.txt") DO start /B "Multicore Compile" 9>"%%~df%%~pf%%~nf.templock" "%GCC_FOLDER_NAME%\bin\gcc.exe" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%%~df%%~pf%%~nf.out" -MF"%%~df%%~pf%%~nf.d" -MT"%%~df%%~pf%%~nf.o" -o "%%~df%%~pf%%~nf.o" "%%~ff"
 @echo off
 
 rem
@@ -118,7 +128,7 @@ rem Compile the .c files in the startup folder (if any exist)
 rem
 
 @echo %echo_stat%
-FOR %%f IN ("%CurDir2%/startup/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -O3 -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.c"
+FOR %%f IN ("%CurDir2%/startup/*.c") DO start /B "Multicore Compile" 9>"%CurDir%\startup\%%~nf.templock" "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -O3 -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.c"
 @echo off
 
 rem
@@ -127,7 +137,7 @@ rem initialize the system)
 rem
 
 @echo %echo_stat%
-FOR %%f IN ("%CurDir2%/startup/*.S") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.S"
+FOR %%f IN ("%CurDir2%/startup/*.S") DO start /B "Multicore Compile" 9>"%CurDir%\startup\%%~nf.templock" "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/startup/%%~nf.out" -MF"%CurDir2%/startup/%%~nf.d" -MT"%CurDir2%/startup/%%~nf.o" -o "%CurDir2%/startup/%%~nf.o" "%CurDir2%/startup/%%~nf.S"
 @echo off
 
 rem
@@ -135,8 +145,29 @@ rem Compile user .c files
 rem
 
 @echo %echo_stat%
-FOR %%f IN ("%CurDir2%/src/*.c") DO "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/src/%%~nf.out" -MF"%CurDir2%/src/%%~nf.d" -MT"%CurDir2%/src/%%~nf.o" -o "%CurDir2%/src/%%~nf.o" "%CurDir2%/src/%%~nf.c"
+FOR %%f IN ("%CurDir2%/src/*.c") DO start /B "Multicore Compile" 9>"%CurDir%\src\%%~nf.templock" "%GCC_FOLDER_NAME%\bin\gcc.exe" -march=skylake -mavx2 -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wpedantic -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%CurDir2%/src/%%~nf.out" -MF"%CurDir2%/src/%%~nf.d" -MT"%CurDir2%/src/%%~nf.o" -o "%CurDir2%/src/%%~nf.o" "%CurDir2%/src/%%~nf.c"
 @echo off
+
+rem
+rem Wait for compilation to complete
+rem Compilation will complete when the templock files are no longer in use, which will be when each process started by "start" finishes.
+rem
+
+echo.
+echo Waiting for compilation to complete...
+echo.
+
+:Wait_Backend
+1>nul 2>nul timeout 1 /nobreak
+FOR /F "usebackq tokens=*" %%f IN ("%CurDir%\c_files_windows_temp.txt") DO ( (call ) 9>"%%~df%%~pf%%~nf.templock" || goto :Wait_Backend ) 2>nul
+
+:Wait_startup
+1>nul 2>nul timeout 1 /nobreak
+FOR %%f IN ("%CurDir%\startup\*.templock") DO ( (call ) 9>"%CurDir%\startup\%%~nf.templock" || goto :Wait_startup ) 2>nul
+
+:Wait_src
+1>nul 2>nul timeout 1 /nobreak
+FOR %%f IN ("%CurDir%\src\*.templock") DO ( (call ) 9>"%CurDir%\src\%%~nf.templock" || goto :Wait_src ) 2>nul
 
 rem
 rem Create OBJECTS variable, whose sole purpose is to allow conversion of
@@ -150,7 +181,7 @@ rem Create the objects.list file, which contains properly-formatted (i.e. has
 rem forward slashes) locations of compiled Backend .o files
 rem
 
-FOR /F "tokens=*" %%f IN ('type "%CurDir%\c_files_windows.txt"') DO (set OBJECTS="%%~df%%~pf%%~nf.o" & set OBJECTS=!OBJECTS:\=/! & set OBJECTS=!OBJECTS: =\ ! & set OBJECTS=!OBJECTS:"\ \ ="! & echo !OBJECTS! >> objects.list)
+FOR /F "usebackq tokens=*" %%f IN ("%CurDir%\c_files_windows_temp.txt") DO (set OBJECTS="%%~df%%~pf%%~nf.o" & set OBJECTS=!OBJECTS:\=/! & set OBJECTS=!OBJECTS: =\ ! & set OBJECTS=!OBJECTS:"\ \ ="! & echo !OBJECTS! >> objects.list)
 
 rem
 rem Add compiled .o files from the startup directory to objects.list
@@ -163,6 +194,13 @@ rem Add compiled user .o files to objects.list
 rem
 
 FOR %%f IN ("%CurDir2%/src/*.o") DO echo "%CurDir3%/src/%%~nxf" >> objects.list
+
+rem
+rem Delete ASCII-formatted temporary files
+rem
+
+del "%CurDir%\c_files_windows_temp.txt"
+del "%CurDir%\h_files_temp.txt"
 
 rem
 rem Link the object files using all the objects in objects.list and an optional

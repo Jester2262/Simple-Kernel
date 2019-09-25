@@ -2,7 +2,7 @@
 rem
 rem =================================
 rem
-rem RELEASE VERSION 1.11
+rem RELEASE VERSION 1.2
 rem
 rem GCC (MinGW-w64) Kernel64 Windows Cleanup Script
 rem
@@ -15,15 +15,16 @@ rem command line
 rem
 
 echo.
-echo Running cleanup procedures; press CTRL+C to exit now. Otherwise...
+echo Running cleanup procedures: press CTRL+C to exit now. Otherwise...
 pause
 
 rem
 rem Move into the Backend folder, where all the magic happens
 rem
 
-setlocal
+setlocal ENABLEDELAYEDEXPANSION
 
+set echo_stat=off
 set CurDir=%CD%
 
 cd ../Backend
@@ -38,8 +39,8 @@ del Kernel64-Ryzen.exe
 del output.map
 del objects.list
 
-@echo on
-FOR /F "tokens=*" %%f IN ('type "%CurDir%\c_files_windows.txt"') DO (del "%%~df%%~pf%%~nf.o" & del "%%~df%%~pf%%~nf.d" & del "%%~df%%~pf%%~nf.out")
+@echo %echo_stat%
+FOR /F "tokens=*" %%f IN ('type "%CurDir%\c_files_windows.txt"') DO ( del "%%~df%%~pf%%~nf.o" & del "%%~df%%~pf%%~nf.d" & del "%%~df%%~pf%%~nf.out" & del "%%~df%%~pf%%~nf.templock" )
 @echo off
 
 rem
@@ -52,9 +53,12 @@ rem
 rem Delete compiled object files
 rem
 
+@echo %echo_stat%
 del *.o
 del *.d
 del *.out
+del *.templock
+@echo off
 
 rem
 rem Move into user source directory
@@ -66,9 +70,12 @@ rem
 rem Delete compiled object files
 rem
 
+@echo %echo_stat%
 del *.o
 del *.d
 del *.out
+del *.templock
+@echo off
 
 rem
 rem Return to folder started from

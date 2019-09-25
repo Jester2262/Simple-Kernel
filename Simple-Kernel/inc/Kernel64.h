@@ -650,6 +650,7 @@ extern const EFI_GUID Acpi20TableGuid;
 extern const EFI_GUID SmbiosTableGuid;
 extern const EFI_GUID Smbios3TableGuid;
 extern const EFI_GUID SalSystemTableGuid;
+
 //----------------------------------------------------------------------------------------------------------------------------------
 //  Function Prototypes
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -666,6 +667,7 @@ void System_Init(LOADER_PARAMS * LP);
 uint64_t get_tick(void);
 void HaCF(void); // Note: this is at the very bottom of System.c
 void Enable_AVX(void);
+void Enable_Local_x2APIC(void);
 void Enable_Maskable_Interrupts(void); // Exceptions and Non-Maskable Interrupts are always enabled.
 void Enable_HWP(void);
 void Find_RSDP(LOADER_PARAMS * LP);
