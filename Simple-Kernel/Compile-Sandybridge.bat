@@ -27,7 +27,7 @@ rem
 rem Globally enable or disable display of commands that are run at compile time
 rem
 
-set echo_stat=on
+set echo_stat=off
 
 rem
 rem CurDir is DOS path
@@ -119,6 +119,11 @@ rem Note that Windows has 9 command streams, so per this approach stream 9 can b
 rem https://stackoverflow.com/questions/18758502/wait-for-multiple-applications-run-asynchronously-from-batch-file-to-finish/18759831
 rem
 
+rem Put this message here so it doesn't mess with errors
+echo.
+echo Waiting for compilation to complete...
+echo.
+
 @echo %echo_stat%
 FOR /F "usebackq tokens=*" %%f IN ("%CurDir%\c_files_windows_temp.txt") DO start /B "Multicore Compile" 9>"%%~df%%~pf%%~nf.templock" "%GCC_FOLDER_NAME%\bin\gcc.exe" -DACPI_USE_LOCAL_CACHE -DACPI_CACHE_T=ACPI_MEMORY_LIST -march=sandybridge -mavx -mcmodel=small -mno-stack-arg-probe -m64 -mno-red-zone -maccumulate-outgoing-args -Og -ffreestanding -fomit-frame-pointer -fno-delete-null-pointer-checks -fno-common -fno-zero-initialized-in-bss -fno-exceptions -fno-stack-protector -fno-stack-check -fno-strict-aliasing -fno-merge-all-constants -fno-merge-constants --std=gnu11 -I!HFILES! -g3 -Wall -Wextra -Wdouble-promotion -Wno-unused-parameter -fmessage-length=0 -ffunction-sections -c -MMD -MP -Wa,-adghlmns="%%~df%%~pf%%~nf.out" -MF"%%~df%%~pf%%~nf.d" -MT"%%~df%%~pf%%~nf.o" -o "%%~df%%~pf%%~nf.o" "%%~ff"
 @echo off
@@ -152,10 +157,6 @@ rem
 rem Wait for compilation to complete
 rem Compilation will complete when the templock files are no longer in use, which will be when each process started by "start" finishes.
 rem
-
-echo.
-echo Waiting for compilation to complete...
-echo.
 
 :Wait_Backend
 1>nul 2>nul timeout 1 /nobreak

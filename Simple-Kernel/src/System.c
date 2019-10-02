@@ -121,16 +121,6 @@ __attribute__((target("no-sse"))) void System_Init(LOADER_PARAMS * LP)
   Find_RSDP(LP);
   printf("Global RSDP found and set. Address: %#qx\r\n", Global_RSDP_Address);
 
-  Enable_Local_x2APIC(); // TODO This needs to be done per core
-  // It has a printf in it
-
-  // TODO enabling multicore stuff goes here, before interrupts
-
-  // Enable Maskable Interrupts
-  // Exceptions and Non-Maskable Interrupts are always enabled.
-//  Enable_Maskable_Interrupts();
-  // It has a printf in it
-
  // This will make more sense after multicore is implemented.
   ACPI_STATUS ACPIInitStatus = InitializeFullAcpi();
 //  ACPI_STATUS ACPIInitStatus = InitializeAcpiTablesOnly();
@@ -141,6 +131,19 @@ __attribute__((target("no-sse"))) void System_Init(LOADER_PARAMS * LP)
     HaCF();
   }
   printf("ACPI Mode Enabled\r\n");
+
+  Set_ACPI_APIC_Mode();
+  // It has a printf in it
+
+  Enable_Local_x2APIC(); // TODO This needs to be done per core
+  // It has a printf in it
+
+  // TODO enabling multicore stuff goes here, before interrupts
+
+  // Enable Maskable Interrupts
+  // Exceptions and Non-Maskable Interrupts are always enabled.
+//  Enable_Maskable_Interrupts();
+  // It has a printf in it
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -3246,6 +3249,11 @@ void User_ISR_handler(INTERRUPT_FRAME * i_frame)
       // User-Defined Interrupts (32-255)
       //
 
+      // 39 & 47 are spurious vectors from dual-PIC chips (IR(Q)7 and IR(Q)15), if such chips exist in a system. 
+      case 39:
+        break;
+      case 47:
+        break;
   //    case 32: // Minimum allowed user-defined case number
   //    // Case 32 code
   //      break;

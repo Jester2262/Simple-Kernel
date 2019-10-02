@@ -637,12 +637,17 @@ typedef struct __attribute__((packed)) {
 //----------------------------------------------------------------------------------------------------------------------------------
 // Global Variables
 //----------------------------------------------------------------------------------------------------------------------------------
+//
+// See Global_Vars.c for a description of each one.
+//
 
 extern EFI_PHYSICAL_ADDRESS Global_RSDP_Address;
 extern ACPI_INTERRUPT_STRUCT Global_ACPI_Interrupt_Table[256];
 extern TSC_FREQUENCY_STRUCT Global_TSC_frequency;
 extern GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info;
 extern GLOBAL_PRINT_INFO_STRUCT Global_Print_Info;
+extern uint64_t Numcores;
+extern EFI_PHYSICAL_ADDRESS LapicAddress;
 
 extern const EFI_GUID MpsTableGuid;
 extern const EFI_GUID Acpi10TableGuid;
@@ -899,6 +904,7 @@ ACPI_STATUS InitializeFullAcpi(void);
 ACPI_STATUS Quit_ACPI(void);
 ACPI_STATUS InitializeAcpiTablesOnly(void);
 ACPI_STATUS InitializeAcpiAfterTables(void);
+void Set_ACPI_APIC_Mode(void);
 
 // Shutdown and restart via ACPI
 void ACPI_Shutdown(void);

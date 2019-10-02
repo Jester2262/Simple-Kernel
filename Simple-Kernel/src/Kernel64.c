@@ -219,6 +219,7 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
   uint64_t end_time = get_tick();
   printf("Result: start: %qu end: %qu diff: %qu\r\n", start_time, end_time, end_time - start_time);
 
+#if(0)
   Draw_vector(Global_Print_Info.defaultGPU, 500, 500, 500, 700, 0x000000FF); // |
   Draw_vector(Global_Print_Info.defaultGPU, 500, 500, 700, 500, 0x000000FF); // --
   Draw_vector(Global_Print_Info.defaultGPU, 700, 700, 700, 500, 0x000000FF); //  |
@@ -282,6 +283,9 @@ void kernel_main(LOADER_PARAMS * LP) // Loader Parameters
 
   Draw_filled_triangle(Global_Print_Info.defaultGPU, 700, 600, 1000, 300, 1000, 600, 0x0000FF00);
   Draw_triangle(Global_Print_Info.defaultGPU, 700, 600, 1000, 300, 700, 300, 0x00FF0000);
+
+#endif
+
 /*
   printf("Avg CPU freq: %qu\r\n", get_CPU_freq(NULL, 0));
   uint64_t perfcounters[2] = {1, 1};

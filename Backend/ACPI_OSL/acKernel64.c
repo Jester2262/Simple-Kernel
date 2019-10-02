@@ -49,6 +49,10 @@
 // I don't like unused variables, but we do need this here.
 #define UNUSED(x) (void)x
 
+static ACPI_STATUS Set_ACPI_SCI_Override(void);
+static ACPI_STATUS Init_EC_Handler(void);
+static uint16_t sci_override_flags = 0;
+
 //----------------------------------------------------------------------------------------------------------------------------------
 // 9.1 Environmental and ACPI Tables
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -557,7 +561,7 @@ ACPI_STATUS AcpiOsWritePort(ACPI_IO_ADDRESS Address, UINT32 Value, UINT32 Width)
 ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID *PciId, UINT32 Register, UINT64 *Value, UINT32 Width)
 {
   // Somewhere over the rainbow, MMIO with MCFG table is needed for PCIe Extended Config Space access
-  // That'll need AcpiGetTable() & AcpiPutTable()
+  // That'll need AcpiGetTable() (shouldn't need puttable, since this doesn't get used until after tables have been initially loaded. puttable is for InitializeAcpiTablesOnly situations)
   // This might be useful to look at for an example:
   // http://mirror.nyi.net/NetBSD/NetBSD-release-7/src/sys/dev/acpi/acpica/OsdHardware.c
   // This too:
@@ -870,6 +874,19 @@ ACPI_STATUS InitializeFullAcpi(void)
   }
 
   /* Note: Local handlers should be installed here */
+  // Handle SCI override
+  Status = Set_ACPI_SCI_Override();
+  if(ACPI_FAILURE(Status))
+  {
+    return Status;
+  }
+
+  // Handle ECDT
+  Status = Init_EC_Handler();
+  if(ACPI_FAILURE(Status))
+  {
+    return Status;
+  }
 
   /* Initialize the ACPI hardware */
   Status = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION);
@@ -965,6 +982,20 @@ ACPI_STATUS InitializeAcpiAfterTables(void)
 
   /* Note: Local handlers should be installed here */
 
+  // Handle SCI override
+  Status = Set_ACPI_SCI_Override();
+  if(ACPI_FAILURE(Status))
+  {
+    return Status;
+  }
+
+  // Handle ECDT
+  Status = Init_EC_Handler();
+  if(ACPI_FAILURE(Status))
+  {
+    return Status;
+  }
+
   /* Initialize the ACPI hardware */
   Status = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION);
   if(ACPI_FAILURE(Status))
@@ -980,6 +1011,338 @@ ACPI_STATUS InitializeAcpiAfterTables(void)
   }
 
   return AE_OK;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Set_ACPI_SCI_Override: Find APIC Override for ACPI SCI Interrupt
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// The MADT table may contain an override for the ACPI global SCI interrupt, which should be used for APIC mode instead of the default
+// legacy PIC values.
+//
+// Returns AE_OK on success.
+//
+
+static ACPI_STATUS Set_ACPI_SCI_Override(void)
+{
+  ACPI_TABLE_HEADER * MADTTableHeader;
+  ACPI_STATUS Status = AcpiGetTable(ACPI_SIG_MADT, 1, &MADTTableHeader);
+  if(ACPI_FAILURE(Status))
+  {
+    error_printf("AcpiGetTable failed.\r\n");
+    return Status;
+  }
+
+  ACPI_TABLE_MADT * MADTTable = (ACPI_TABLE_MADT*)MADTTableHeader;
+
+  uint32_t MADTTableEnd = MADTTable->Header.Length;
+  ACPI_SUBTABLE_HEADER * TypeLength;
+
+  // MADT Structs start at offset 44
+  for(uint32_t TableParse = 44; TableParse < MADTTableEnd; TableParse += TypeLength->Length)
+  {
+    TypeLength = (ACPI_SUBTABLE_HEADER *)((uint64_t)MADTTable + TableParse);
+    //printf("MADT Type: %hhx\r\n", TypeLength->Type);
+    if(TypeLength->Type == ACPI_MADT_TYPE_INTERRUPT_OVERRIDE)
+    {
+      ACPI_MADT_INTERRUPT_OVERRIDE * MADTOverrideType = (ACPI_MADT_INTERRUPT_OVERRIDE *)TypeLength;
+
+      if(MADTOverrideType->SourceIrq == AcpiGbl_FADT.SciInterrupt)
+      {
+        AcpiGbl_FADT.SciInterrupt = (uint16_t)MADTOverrideType->GlobalIrq;
+        sci_override_flags = MADTOverrideType->IntiFlags;
+
+        // Get polarity and trigger overrides
+        uint8_t pol = MADTOverrideType->IntiFlags & 0x03;
+        uint8_t trig = (MADTOverrideType->IntiFlags & 0x0C) >> 2;
+
+        info_printf("\r\nACPI APIC SCI override found: Old IRQ: %hhu, New IRQ: %u\r\n", MADTOverrideType->SourceIrq, MADTOverrideType->GlobalIrq);
+        printf("Polarity: %#hx, TriggerLv: %#hx\r\n", pol, trig);
+
+        if(MADTTable->Flags & 0x1) // System has legacy PICs
+        {
+          // Take care of trigger level type override for SCI
+          // ELCR is "Edge/Level Control Register"
+          if((!trig) || (trig == 3)) // Level-triggered. "Bus compatible" is level-triggered for APIC
+          {
+            uint16_t elcr = portio_rw(0x4D0, 0, 1, 0);
+            elcr |= portio_rw(0x4D1, 0, 1, 0) << 8;
+
+            if( !(elcr & (1 << MADTOverrideType->SourceIrq)) ) // Is trigger level already set?
+            {
+              // No, set it
+              elcr |= (1 << MADTOverrideType->SourceIrq);
+              portio_rw(0x4D0, elcr & 0xFF, 1, 1);
+              portio_rw(0x4D1, (elcr >> 8) & 0xFF, 1, 1);
+              info_printf("ACPI PIC SCI trigger level override set (edge --> level).\r\n");
+            }
+            // It is, do nothing.
+          }
+          else if(trig == 1) // Edge-triggered
+          {
+            uint16_t elcr = portio_rw(0x4D0, 0, 1, 0);
+            elcr |= portio_rw(0x4D1, 0, 1, 0) << 8;
+
+            if( (elcr & (1 << MADTOverrideType->SourceIrq)) ) // Is trigger edge already set?
+            {
+              // No, set it
+              elcr &= ~(1 << MADTOverrideType->SourceIrq);
+              portio_rw(0x4D0, elcr & 0xFF, 1, 1);
+              portio_rw(0x4D1, (elcr >> 8) & 0xFF, 1, 1);
+              info_printf("ACPI PIC SCI trigger level override set (level --> edge).\r\n");
+            }
+            // It is, do nothing.
+          }
+          // Any other values are reserved, so nothing can be done for them.
+        }
+
+        break;
+      }
+    }
+  }
+
+  return AE_OK;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Init_EC_Handler: Initialize Embedded Controller ACPI Handler
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// The embedded controller, if there exists an ECDT, needs to have a handler installed before enabling ACPI.
+//
+
+static ACPI_STATUS Init_EC_Handler(void)
+{
+  ACPI_TABLE_HEADER * ECDTTableHeader;
+  ACPI_STATUS Status = AcpiGetTable(ACPI_SIG_ECDT, 1, &ECDTTableHeader);
+  if(Status == AE_NOT_FOUND)
+  {
+    printf("No ECDT available.\r\n");
+    return AE_OK;
+  }
+  else if(ACPI_FAILURE(Status))
+  {
+    error_printf("AcpiGetTable failed.\r\n");
+    return Status;
+  }
+
+  ACPI_TABLE_ECDT * ECDTTable = (ACPI_TABLE_ECDT*)ECDTTableHeader;
+
+  // TODO
+  warning_printf("ECDT not yet implemented\r\n");
+
+
+  return AE_OK;
+}
+
+
+//----------------------------------------------------------------------------------------------------------------------------------
+// Set_ACPI_APIC_Mode: Establish APIC Mode in ACPI
+//----------------------------------------------------------------------------------------------------------------------------------
+//
+// This function sets the ACPI system interrupt mode to APIC mode. This is needed to initialize ACPI for APIC operation.
+//
+
+void Set_ACPI_APIC_Mode(void)
+{
+  ACPI_STATUS APICStatus;
+
+  ACPI_TABLE_HEADER * APICTableHeader;
+  APICStatus = AcpiGetTable(ACPI_SIG_MADT, 1, &APICTableHeader);
+  if(ACPI_FAILURE(APICStatus))
+  {
+    error_printf("Could not get MADT/APIC table. %x\r\n", APICStatus);
+  }
+
+  ACPI_TABLE_MADT * APICTable = (ACPI_TABLE_MADT*)APICTableHeader;
+
+  if(APICTable->Flags & 0x1) // Check for PICs
+  {
+    info_printf("System has dual legacy 8259A PICs... ");
+
+    // Remap and mask them.
+    // 8259A datasheet:
+    // https://pdos.csail.mit.edu/6.828/2016/readings/hardware/8259A.pdf
+
+    portio_rw(0x20, 0x11, 1, 1); // Master PIC: Send ICW1, with a requirement that ICW4 will need to be read (D0 = 1). Also set cascade mode (D1 = 0), interval of 8 (D2 = 0, ignored for x86), edge triggered (D3 = 0, ignored anyways with APICs and ELCR)
+    portio_rw(0xA0, 0x11, 1, 1); // Likewise for the slave PIC. For both of these, A0 = 0, and A5-7 (which are D5-7) aren't valid (so set them all zeros) for x86
+
+    portio_rw(0x21, 0x20, 1, 1); // ICW2: Map 8 IRs of master PIC to 0x20 (IDT 32-40)
+    portio_rw(0xA1, 0x28, 1, 1); // Similarly, map 8 IRs of slave PIC to 0x28 (IDT 40-47)
+
+    // Note: where it looks like the datasheet states ICW3 is "read only," the sentence is actually stating "the PIC only pays attention to ICW3 in multi-PIC mode" instead of "the ICW3 byte is not modifiable."
+    // Because read (`reed`) and read (`red`) are spelled the same way. ...Yeah.
+    portio_rw(0x21, 0x04, 1, 1); // ICW3: Tell master PIC it has a slave on IR2.
+    portio_rw(0xA1, 0x02, 1, 1); // Tell slave PIC its ID is 2 (this is a BCD number, whereas the master PIC gets a bitmask)
+
+    portio_rw(0x21, 0x01, 1, 1); // ICW4: 80x86 mode (D0 = 1), disable Auto-EOI (D1 = 0), not buffered (D2 = 0, D3 = 0), not fully nested (D4 = 0), D5-D7 are all 0.
+    portio_rw(0xA1, 0x01, 1, 1); // Likewise for slave PIC
+
+    portio_rw(0x21, 0xFF, 1, 1); // Mask all interrupts on master PIC
+    portio_rw(0xA1, 0xFF, 1, 1); // Mask all interrupts on slave PIC
+
+    info_printf("Masked.\r\n");
+  }
+  else
+  {
+    printf("No legacy PICs.\r\n");
+  }
+
+  // Get Lapic Address
+  LapicAddress = APICTable->Address;
+
+  // Gothrough MADT and set up APICs
+  uint32_t APICTableEnd = APICTable->Header.Length;
+  ACPI_SUBTABLE_HEADER * TypeLength;
+
+  // MADT Structs start at offset 44
+  for(uint32_t TableParse = 44; TableParse < APICTableEnd; TableParse += TypeLength->Length)
+  {
+    TypeLength = (ACPI_SUBTABLE_HEADER *)((uint64_t)APICTable + TableParse);
+
+    //
+    // This was originally going to be a switch() statement, but there are too many variables. That's a lot of
+    // wasted space. Cases in a switch statement are labels, and while each one could be "scoped," that's a C++ way
+    // of thinking. This isn't C++.
+    //
+    // I mean, it'll work, but see here for a sampling of the various responses one might get when using case x:{} :
+    // https://stackoverflow.com/questions/4241545/c-switch-case-curly-braces-after-every-case
+    // Some people get mad, some get uppity, some even say "use functions." To be fair, a switch with function calls
+    // is probably the best way to handle this. However, it is harder to debug.
+    //
+    // At the same time, I also think that this format is quite effective in illustrating how nuts ACPI is when it comes
+    // to interrupts, and also the complexity that is x86 interrupt handling as whole. In my opinion, it's worth leaving
+    // this format as-is just for that. :)
+    //
+
+    if(TypeLength->Type == ACPI_MADT_TYPE_LOCAL_APIC)
+    {
+      Numcores++; // One of these for each core
+      ACPI_MADT_LOCAL_APIC * CoreLapic = (ACPI_MADT_LOCAL_APIC*)TypeLength;
+
+      printf("CPU %hhu: LAPIC ID: %hhu, Flags: %u\r\n", CoreLapic->ProcessorId, CoreLapic->Id, CoreLapic->LapicFlags);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_IO_APIC)
+    {
+      ACPI_MADT_IO_APIC * IOApic = (ACPI_MADT_IO_APIC*)TypeLength;
+
+      // TODO setup ioapic
+
+
+      printf("I/O APIC: ID: %hhu, Address: %#x, GlobalIrqBase: %u\r\n", IOApic->Id, IOApic->Address, IOApic->GlobalIrqBase);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_INTERRUPT_OVERRIDE)
+    {
+      // Bus is always 0
+      ACPI_MADT_INTERRUPT_OVERRIDE * IntOvr = (ACPI_MADT_INTERRUPT_OVERRIDE*)TypeLength;
+      uint8_t pol = IntOvr->IntiFlags & 0x03;
+      uint8_t trig = (IntOvr->IntiFlags & 0x0C) >> 2;
+
+      printf("IRQ Override: SrcIRQ: %hhu, GSI: %u, Trig: %hhu, Pol: %hhu\r\n", IntOvr->SourceIrq, IntOvr->GlobalIrq, trig, pol);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_NMI_SOURCE)
+    {
+      ACPI_MADT_NMI_SOURCE * NMIOvr = (ACPI_MADT_NMI_SOURCE*)TypeLength;
+      uint8_t pol = NMIOvr->IntiFlags & 0x03;
+      uint8_t trig = (NMIOvr->IntiFlags & 0x0C) >> 2;
+
+      printf("NMI Override: GSI: %u, Trig: %hhu, Pol: %hhu\r\n", NMIOvr->GlobalIrq, trig, pol);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_LOCAL_APIC_NMI)
+    {
+      // The LINT value is global/applies to all CPUs if ProcessorId is 0xFF
+      ACPI_MADT_LOCAL_APIC_NMI * LapicNMI = (ACPI_MADT_LOCAL_APIC_NMI*)TypeLength;
+      uint8_t pol = LapicNMI->IntiFlags & 0x03;
+      uint8_t trig = (LapicNMI->IntiFlags & 0x0C) >> 2;
+
+      printf("LAPIC NMI: CPU %hhu, LINTn: %hhu, Trig: %hhu, Pol: %hhu\r\n", LapicNMI->ProcessorId, LapicNMI->Lint, trig, pol);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_LOCAL_APIC_OVERRIDE)
+    {
+      ACPI_MADT_LOCAL_APIC_OVERRIDE * Lapic64Addr = (ACPI_MADT_LOCAL_APIC_OVERRIDE*)TypeLength;
+
+      LapicAddress = Lapic64Addr->Address;
+
+      printf("CPU LAPIC address changed to 64-bit address: %#qx\r\n", LapicAddress);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_IO_SAPIC)
+    {
+      error_printf("I/O SAPIC found. IA64 unsupported. ");
+      info_printf("The Itanic sunk long ago...\r\n");
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_LOCAL_SAPIC)
+    {
+      error_printf("Local SAPIC found. IA64 unsupported. ");
+      info_printf("Impressive that you even made it this far.\r\n");
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_INTERRUPT_SOURCE)
+    {
+      error_printf("I/O SAPIC Interrupt Source found. IA64 unsupported. ");
+      info_printf("That's quite the iceberg.\r\n");
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_LOCAL_X2APIC)
+    {
+      Numcores++; // For more than 255 CPUs
+      ACPI_MADT_LOCAL_X2APIC * x2CoreLapic = (ACPI_MADT_LOCAL_X2APIC*)TypeLength;
+
+      printf("CPU %u: x2LAPIC ID: %u, Flags: %u\r\n", x2CoreLapic->Uid, x2CoreLapic->LocalApicId, x2CoreLapic->LapicFlags);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_LOCAL_X2APIC_NMI)
+    {
+      // The global LINT from this type overrides that in the Local APIC NMI type for all CPUs if it exists
+      // Including those with Uid < 255, which otherwise still need to be described by the non-x2 Local APIC NMI
+      // The LINT is global if the Uid is 0xFFFFFFFF
+      ACPI_MADT_LOCAL_X2APIC_NMI * x2LapicNMI = (ACPI_MADT_LOCAL_X2APIC_NMI*)TypeLength;
+      uint8_t pol = x2LapicNMI->IntiFlags & 0x03;
+      uint8_t trig = (x2LapicNMI->IntiFlags & 0x0C) >> 2;
+
+      printf("x2LAPIC NMI: CPU %u, LINTn: %hhu, Trig: %hhu, Pol: %hhu\r\n", x2LapicNMI->Uid, x2LapicNMI->Lint, trig, pol);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_GENERIC_INTERRUPT)
+    {
+      error_printf("This is an ARM-specific type: %hhu.\r\n", TypeLength->Type);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_GENERIC_DISTRIBUTOR)
+    {
+      error_printf("This is an ARM-specific type: %hhu.\r\n", TypeLength->Type);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_GENERIC_MSI_FRAME)
+    {
+      error_printf("This is an ARM-specific type: %hhu.\r\n", TypeLength->Type);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_GENERIC_REDISTRIBUTOR)
+    {
+      error_printf("This is an ARM-specific type: %hhu.\r\n", TypeLength->Type);
+    }
+    else if(TypeLength->Type == ACPI_MADT_TYPE_GENERIC_TRANSLATOR)
+    {
+      error_printf("This is an ARM-specific type: %hhu.\r\n", TypeLength->Type);
+    }
+    else
+    {
+      printf("Unknown MADT/APIC Table Type: %hhu.\r\n", TypeLength->Type);
+    }
+  }
+
+  // TODO now setup APICs
+
+  ACPI_OBJECT_LIST        ObjList;
+  ACPI_OBJECT             Obj;
+
+  ObjList.Count = 1;
+  ObjList.Pointer = &Obj;
+  Obj.Type = ACPI_TYPE_INTEGER;
+  Obj.Integer.Value = 1; // For control method _PIC, legacy PIC is 0 and APIC is 1, SAPIC is 2 (SAPICs are only for Itanium/IA64 system types)
+
+  APICStatus = AcpiEvaluateObject(ACPI_ROOT_OBJECT, "_PIC", &ObjList, NULL); // _PIC has no return values
+  if(ACPI_FAILURE(APICStatus))
+  {
+    warning_printf("ACPI failed to set _PIC to APIC mode. %#x\r\n", APICStatus);
+  }
+  else
+  {
+    printf("ACPI APIC mode set.\r\n");
+  }
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------

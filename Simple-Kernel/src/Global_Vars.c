@@ -61,9 +61,20 @@
 // Core Functionality
 //----------------------------------------------------------------------------------------------------------------------------------
 
+// RSDP Address
 EFI_PHYSICAL_ADDRESS Global_RSDP_Address = ~0ULL;
+
+// Array to keep track of GSIs
 ACPI_INTERRUPT_STRUCT Global_ACPI_Interrupt_Table[256] = {0};
+
+// TSC frequency scales for timing
 TSC_FREQUENCY_STRUCT Global_TSC_frequency = {TSC_FALLBACK_CYCLES_PER_SEC, TSC_FALLBACK_CYCLES_PER_MSEC, TSC_FALLBACK_CYCLES_PER_USEC, TSC_FALLBACK_CYCLES_PER_100NSEC, TSC_FALLBACK_CYCLES_PER_10NSEC};
+
+// Number of processor cores
+uint64_t Numcores = 0;
+
+// Address of CPU Local APICs
+EFI_PHYSICAL_ADDRESS LapicAddress = 0xFEE00000;
 
 //----------------------------------------------------------------------------------------------------------------------------------
 // Text Printing
@@ -121,6 +132,7 @@ typedef struct {
 } GLOBAL_PRINT_INFO_STRUCT;
 */
 
+// Structure to keep track of printf invocations
 GLOBAL_PRINT_INFO_STRUCT Global_Print_Info = {{1, 1, NULL, 1, 1, 1}, 8, 8, 0x0, 0x0, 0x0, 0, 0, 1, 1, 0, 0, 0};
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -136,13 +148,15 @@ typedef struct {
   UINT32                  Pad;                     // Pad to multiple of 64 bits
 } GLOBAL_MEMORY_INFO_STRUCT;
 */
+
+// Structure to keep track of memory map information
 GLOBAL_MEMORY_INFO_STRUCT Global_Memory_Info = {1, 1, NULL, 1, 0};
 
 //----------------------------------------------------------------------------------------------------------------------------------
 // Misc
 //----------------------------------------------------------------------------------------------------------------------------------
 
-// UEFI Configuration Tables
+// UEFI & ACPI Configuration Tables
 const EFI_GUID MpsTableGuid = MPS_TABLE_GUID;
 const EFI_GUID Acpi10TableGuid = ACPI_10_TABLE_GUID;
 const EFI_GUID Acpi20TableGuid = ACPI_20_TABLE_GUID;
